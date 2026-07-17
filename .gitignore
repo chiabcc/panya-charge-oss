@@ -1,0 +1,32 @@
+# Binaries
+/panya-charge-oss
+/panya-charge-oss.exe
+/bin/
+
+# Config (may contain secrets)
+config.yaml
+config.local.yaml
+
+# Test artifacts
+*.out
+coverage.out
+coverage.html
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go workspace files (personal dev only)
+go.work
+go.work.sum
+
+# Agent/tooling
+.opencode/
+.sisyphus/

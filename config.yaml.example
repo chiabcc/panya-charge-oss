@@ -1,0 +1,29 @@
+# panya-charge-oss example configuration
+# Copy to config.yaml and edit for your setup.
+# All values have defaults — this file is optional.
+
+server:
+  ocpp_port: 8887              # WebSocket port for OCPP charger connections
+  ocpp_path: "/{ws}"           # OCPP WebSocket path (chargers connect to ws://host:8887/{ws})
+  log_level: info              # debug | info | warn | error
+  # log_format: text           # text | json (unset = text)
+
+mqtt:
+  broker: "tcp://localhost:1883"  # MQTT broker URL (use core-mosquitto for HA add-on)
+  client_id: "panya-charge"       # MQTT client ID
+  # username: ""                  # broker username (omit if no auth)
+  # password: ""                  # broker password (omit if no auth)
+  base_topic: "panya"             # root topic for all published/subscribed topics
+  disconnect_threshold_sec: 60    # revert to safe state (6A) if no grid data for this long
+
+  # Topic mapping — override only if your sensors use non-default topics
+  topics:
+    grid_power: "grid/power"            # grid net power (watts, negative = export)
+    # solar_power: "solar/power"        # uncomment for multi-source surplus mode
+    # consumption_power: "home/power"   # uncomment for multi-source surplus mode
+
+charging:
+  min_amps: 6                 # IEC 61851 minimum (do not go below 6A)
+  max_amps: 32                # Type 2 single-phase maximum
+  contactor_cooldown_sec: 180 # minimum time between start/stop commands (protects contactor)
+  default_amps: 6             # fallback current when no surplus data

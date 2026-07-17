@@ -1,0 +1,381 @@
+package csms
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	inmqtt "github.com/chiabcc/panya-charge-oss/internal/adapter/inbound/mqtt"
+	outmqtt "github.com/chiabcc/panya-charge-oss/internal/adapter/outbound/mqtt"
+	"github.com/chiabcc/panya-charge-oss/internal/adapter/outbound/ocpp"
+	"github.com/chiabcc/panya-charge-oss/internal/config"
+	"github.com/chiabcc/panya-charge-oss/internal/domain/ports"
+	"github.com/chiabcc/panya-charge-oss/internal/domain/proxy"
+	"github.com/chiabcc/panya-charge-oss/internal/domain/smartcharging"
+	pkgcsms "github.com/chiabcc/panya-charge-oss/pkg/csms"
+)
+
+const (
+	controllerPollInterval = 10 * time.Second
+	gridVoltage            = 230.0
+)
+
+type CSMS struct {
+	emitter     *pkgcsms.Emitter
+	chargerRepo *ports.InMemoryChargerRepository
+	sessionRepo *ports.InMemorySessionRepository
+	meterRepo   *ports.InMemoryMeterRepository
+	proxyRepo   *ports.InMemoryProxyConfigRepository
+
+	handler    *ocpp.Handler
+	controller *ocpp.Controller
+	server     *ocpp.Server
+	commander  *ocpp.Commander
+	publisher  *outmqtt.Publisher
+	subscriber *inmqtt.Subscriber
+	energy     *outmqtt.EnergyTracker
+
+	cancelFn context.CancelFunc
+	wg       sync.WaitGroup
+	started  atomic.Bool
+	logger   *slog.Logger
+}
+
+func New(cfg config.Config) (*CSMS, error) {
+	logger := buildLogger(cfg.Server.LogLevel, cfg.Server.LogFormat)
+
+	chargerRepo := ports.NewInMemoryChargerRepository()
+	sessionRepo := ports.NewInMemorySessionRepository()
+	meterRepo := ports.NewInMemoryMeterRepository()
+	proxyRepo := ports.NewInMemoryProxyConfigRepository()
+
+	emitter := pkgcsms.NewEmitter(0, logger)
+
+	energy := outmqtt.NewEnergyTracker()
+
+	publisher, err := outmqtt.NewPublisher(
+		cfg.MQTT.Broker, cfg.MQTT.ClientID,
+		cfg.MQTT.Username, cfg.MQTT.Password,
+		cfg.MQTT.BaseTopic, cfg.MQTT.Topics,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("mqtt publisher: %w", err)
+	}
+
+	relay := ocpp.NewNoopRelay(logger)
+	router := ocpp.NewRouter(proxy.DefaultPolicy(), relay, logger)
+
+	handler := ocpp.NewHandler(
+		router,
+		chargerRepo,
+		sessionRepo,
+		meterRepo,
+		proxyRepo,
+		publisher,
+		publisher,
+		nil,
+		cfg.Charging.MinAmps,
+		cfg.Charging.MaxAmps,
+		logger,
+		nil,
+	)
+	handler.SetEmitter(emitter)
+
+	server, err := ocpp.NewServer(cfg.Server.OCPPPort, cfg.Server.OCPPPath, handler, logger)
+	if err != nil {
+		publisher.Close()
+		return nil, fmt.Errorf("ocpp server: %w", err)
+	}
+
+	commander := ocpp.NewCommander(server.CentralSystem(), logger)
+
+	calc := smartcharging.NewCalculator(cfg.Charging.MinAmps, cfg.Charging.MaxAmps, gridVoltage)
+
+	staleTimeout := time.Duration(cfg.MQTT.DisconnectThresholdSec) * time.Second
+	if staleTimeout <= 0 {
+		staleTimeout = 60 * time.Second
+	}
+
+	controller := ocpp.NewController(
+		commander,
+		chargerRepo,
+		energy,
+		publisher,
+		calc,
+		cfg.Charging.MinAmps,
+		controllerPollInterval,
+		staleTimeout,
+		logger,
+	)
+	controller.SetEmitter(emitter)
+
+	cmd := &cmdBridge{
+		commander:   commander,
+		chargerRepo: chargerRepo,
+		sessionRepo: sessionRepo,
+		logger:      logger,
+	}
+
+	subscriber, err := inmqtt.NewSubscriber(
+		cfg.MQTT.Broker, cfg.MQTT.ClientID,
+		cfg.MQTT.Username, cfg.MQTT.Password,
+		cfg.MQTT.BaseTopic, cfg.MQTT.Topics,
+		energy, cmd, logger,
+	)
+	if err != nil {
+		publisher.Close()
+		return nil, fmt.Errorf("mqtt subscriber: %w", err)
+	}
+
+	return &CSMS{
+		emitter:     emitter,
+		chargerRepo: chargerRepo,
+		sessionRepo: sessionRepo,
+		meterRepo:   meterRepo,
+		proxyRepo:   proxyRepo,
+		handler:     handler,
+		controller:  controller,
+		server:      server,
+		commander:   commander,
+		publisher:   publisher,
+		subscriber:  subscriber,
+		energy:      energy,
+		logger:      logger,
+	}, nil
+}
+
+func (c *CSMS) Start(ctx context.Context) error {
+	if !c.started.CompareAndSwap(false, true) {
+		return fmt.Errorf("csms already started")
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	c.cancelFn = cancel
+
+	c.server.Start()
+
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		c.controller.Run(ctx)
+	}()
+
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (c *CSMS) Stop() {
+	if c.cancelFn != nil {
+		c.cancelFn()
+	}
+	c.server.Stop()
+	if c.subscriber != nil {
+		c.subscriber.Close()
+	}
+	if c.publisher != nil {
+		c.publisher.Close()
+	}
+	c.wg.Wait()
+	c.started.Store(false)
+}
+
+func (c *CSMS) Subscribe(ctx context.Context, buffer int) <-chan pkgcsms.Event {
+	if !c.started.Load() {
+		return nil
+	}
+	if buffer <= 0 {
+		buffer = pkgcsms.DefaultEventBufferSize
+	}
+
+	src := c.emitter.Subscribe()
+	out := make(chan pkgcsms.Event, buffer)
+
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev, ok := <-src:
+				if !ok {
+					return
+				}
+				select {
+				case out <- ev:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return out
+}
+
+func (c *CSMS) Chargers() []pkgcsms.ChargerInfo {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	chargers, err := c.chargerRepo.ListChargers(ctx)
+	if err != nil {
+		return []pkgcsms.ChargerInfo{}
+	}
+
+	result := make([]pkgcsms.ChargerInfo, 0, len(chargers))
+	for _, ch := range chargers {
+		info := pkgcsms.ChargerInfo{
+			ID:           ch.ID,
+			Vendor:       ch.Vendor,
+			Model:        ch.Model,
+			Firmware:     ch.FirmwareVersion,
+			SerialNumber: ch.SerialNumber,
+		}
+		if !ch.Online {
+			info.Status = "Unavailable"
+		}
+
+		conns, _ := c.chargerRepo.ListConnectors(ctx, ch.ID)
+		if len(conns) > 0 {
+			info.ConnectorID = conns[0].ConnectorID
+			info.Status = string(conns[0].Status)
+		}
+
+		if active, _ := c.sessionRepo.GetActiveSession(ctx, ch.ID, info.ConnectorID); active != nil {
+			info.TxID = active.TransactionID
+		}
+
+		result = append(result, info)
+	}
+
+	return result
+}
+
+type cmdBridge struct {
+	commander   ports.ChargerCommander
+	chargerRepo ports.ChargerRepository
+	sessionRepo ports.SessionRepository
+	logger      *slog.Logger
+}
+
+func (b *cmdBridge) OnSetAmps(chargerID string, amps int) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if chargerID == "" {
+		chargers, err := b.chargerRepo.ListChargers(ctx)
+		if err != nil {
+			b.logger.Error("cmd: list chargers failed", "err", err)
+			return
+		}
+		for _, ch := range chargers {
+			b.applyAmps(ctx, ch.ID, amps)
+		}
+	} else {
+		b.applyAmps(ctx, chargerID, amps)
+	}
+}
+
+func (b *cmdBridge) applyAmps(ctx context.Context, chargerID string, amps int) {
+	conns, err := b.chargerRepo.ListConnectors(ctx, chargerID)
+	if err != nil {
+		b.logger.Error("cmd: list connectors failed", "charger", chargerID, "err", err)
+		return
+	}
+	for _, conn := range conns {
+		if conn.ConnectorID == 0 {
+			continue
+		}
+		if err := b.commander.SetChargingProfile(chargerID, conn.ConnectorID, amps); err != nil {
+			b.logger.Error("cmd: set charging profile failed", "charger", chargerID, "err", err)
+		}
+	}
+}
+
+func (b *cmdBridge) OnSetState(chargerID string, charging bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ids := []string{chargerID}
+	if chargerID == "" {
+		chargers, err := b.chargerRepo.ListChargers(ctx)
+		if err != nil {
+			b.logger.Error("cmd: list chargers failed", "err", err)
+			return
+		}
+		ids = ids[:0]
+		for _, ch := range chargers {
+			ids = append(ids, ch.ID)
+		}
+	}
+
+	for _, id := range ids {
+		if charging {
+			b.startCharging(ctx, id)
+		} else {
+			b.stopCharging(ctx, id)
+		}
+	}
+}
+
+func (b *cmdBridge) startCharging(ctx context.Context, chargerID string) {
+	conns, err := b.chargerRepo.ListConnectors(ctx, chargerID)
+	if err != nil {
+		b.logger.Error("cmd: list connectors for start failed", "charger", chargerID, "err", err)
+		return
+	}
+	for _, conn := range conns {
+		if conn.ConnectorID == 0 {
+			continue
+		}
+		if err := b.commander.RemoteStartTransaction(chargerID, conn.ConnectorID, "default"); err != nil {
+			b.logger.Error("cmd: remote start failed", "charger", chargerID, "err", err)
+		}
+	}
+}
+
+func (b *cmdBridge) stopCharging(ctx context.Context, chargerID string) {
+	conns, err := b.chargerRepo.ListConnectors(ctx, chargerID)
+	if err != nil {
+		b.logger.Error("cmd: list connectors for stop failed", "charger", chargerID, "err", err)
+		return
+	}
+	for _, conn := range conns {
+		active, _ := b.sessionRepo.GetActiveSession(ctx, chargerID, conn.ConnectorID)
+		if active == nil || active.TransactionID == 0 {
+			continue
+		}
+		if err := b.commander.RemoteStopTransaction(chargerID, active.TransactionID); err != nil {
+			b.logger.Error("cmd: remote stop failed", "charger", chargerID, "err", err)
+		}
+	}
+}
+
+func buildLogger(level, format string) *slog.Logger {
+	var sl slog.Level
+	switch strings.ToUpper(level) {
+	case "DEBUG":
+		sl = slog.LevelDebug
+	case "WARN":
+		sl = slog.LevelWarn
+	case "ERROR":
+		sl = slog.LevelError
+	default:
+		sl = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{Level: sl}
+	var h slog.Handler
+	if strings.ToLower(format) == "json" {
+		h = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		h = slog.NewTextHandler(os.Stderr, opts)
+	}
+	return slog.New(h)
+}
