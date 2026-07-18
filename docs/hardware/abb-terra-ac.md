@@ -16,12 +16,12 @@ The primary hardware target for panya-charge-oss is the **ABB Terra AC W22-G5-R-
 | Connector | Type 2 |
 | Protocol | OCPP 1.6-J over WebSocket |
 | IP rating | IP54 (indoor/outdoor) |
-| Display | Touchscreen LCD |
+| Display | LED status indicators (green / yellow / red) |
 
 ## Firmware Requirements
 
 - **Minimum firmware**: 1.8.32 (OCPP 1.6-J support)
-- Check firmware version in the charger's settings menu or via `BootNotification` payload
+- Check firmware version via `BootNotification` payload (no display on this model)
 
 ## OCPP Configuration
 
