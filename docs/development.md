@@ -10,6 +10,7 @@ open-source OCPP 1.6-J protocol bridge.
 - [Configuration](#configuration)
 - [Building](#building)
 - [Running](#running)
+- [Docker Compose Dev Stack](#docker-compose-dev-stack)
 - [Testing](#testing)
 - [MQTT Topics](#mqtt-topics)
 - [Debugging](#debugging)
@@ -22,6 +23,7 @@ open-source OCPP 1.6-J protocol bridge.
 | Go | 1.25+ | Language runtime |
 | MQTT broker | Mosquitto, EMQX, or Home Assistant | Runtime dependency |
 | Git | any | Source control |
+| Docker + Compose | optional | Full dev stack (CSMS + Mosquitto + HA) — see [Docker Compose Dev Stack](#docker-compose-dev-stack) |
 
 **No CGO required.** The project is pure Go with no C dependencies, making
 cross-compilation straightforward.
@@ -86,6 +88,145 @@ go run ./cmd/panya-charge-oss
 
 The CSMS listens on port 8887 for OCPP WebSocket connections.
 Point your charger to `ws://localhost:8887/{ws}`.
+
+## Docker Compose Dev Stack
+
+For end-to-end development against Home Assistant, use the bundled compose
+stack. It brings up:
+
+| Service | Container | Port | Purpose |
+|---------|-----------|------|---------|
+| CSMS | `panya-csms` | 8887 | panya-charge-oss built from your local source |
+| Mosquitto | `panya-mosquitto` | 1883 | MQTT broker |
+| Home Assistant | `panya-ha` | 8123 | Auto-discovers charger entities |
+
+### One-Time Setup
+
+1. Copy the sample CSMS config:
+
+   ```bash
+   cp config.yaml.sample config.yaml
+   ```
+
+   This config points the CSMS at the Mosquitto container (`tcp://mosquitto:1883`)
+   rather than localhost — required for inter-container networking.
+
+2. Start the stack:
+
+   ```bash
+   docker compose up -d
+   ```
+
+   First launch builds the CSMS image from `Dockerfile` (multi-stage Go build,
+   ~30s on a warm cache). HA takes 30–60s to initialize on first boot.
+
+3. Open Home Assistant at **http://localhost:8123** and complete onboarding
+   (create an account, set location). The MQTT integration is pre-configured
+   via `deploy/ha/configuration.yaml` — no manual setup needed.
+
+4. Watch the CSMS logs to confirm MQTT connectivity:
+
+   ```bash
+   docker compose logs -f csms
+   ```
+
+   You should see `mqtt subscriber connected broker=tcp://mosquitto:1883`.
+
+### Pointing Your Charger at the Stack
+
+From the charger's perspective, the CSMS is just a WebSocket server on the
+host machine's network. Set the OCPP URL to:
+
+```
+ws://<host-ip>:8887/{ws}
+```
+
+- Use the host's LAN IP, not `localhost` (the charger is not on the host)
+- If running Docker Desktop, port 8887 is forwarded automatically
+- On Linux, ensure the firewall allows 8887/tcp from the charger's subnet
+
+For simulator testing without hardware, see
+[OCPP compatibility notes](ocpp-compatibility.md).
+
+### Iterating on the CSMS
+
+The compose stack mounts `config.yaml` as read-only into the container. To
+pick up config changes:
+
+```bash
+docker compose restart csms
+```
+
+To rebuild the binary after code changes:
+
+```bash
+docker compose up -d --build csms
+```
+
+For tight inner-loop dev, prefer `go run` directly (faster rebuilds) and use
+the compose stack only for Mosquitto + HA:
+
+```bash
+docker compose up -d mosquitto homeassistant
+PANYA_MQTT_BROKER=tcp://localhost:1883 go run ./cmd/panya-charge-oss
+```
+
+### Inspecting MQTT Traffic
+
+Subscribe to all panya topics from the host:
+
+```bash
+docker compose exec mosquitto mosquitto_sub -h localhost -t "panya/#" -v
+```
+
+Publish a test current-limit command:
+
+```bash
+docker compose exec mosquitto mosquitto_pub -h localhost -t "panya/charge/command/set_amps" -m "16"
+```
+
+### Simulating Solar / Grid Data
+
+To exercise smart charging without real sensors, publish power readings to
+the topics the CSMS subscribes to:
+
+```bash
+# Negative grid = exporting surplus (controller will ramp charging up)
+docker compose exec mosquitto mosquitto_pub -h localhost -t "panya/grid/power" -m "-3000"
+
+# Positive grid = importing (controller will ramp down / stop)
+docker compose exec mosquitto mosquitto_pub -h localhost -t "panya/grid/power" -m "1500"
+```
+
+For a realistic solar curve simulation, wrap those publishes in a shell loop
+or use an HA automation that publishes a time-of-day-based value.
+
+### Tear-Down
+
+```bash
+docker compose down          # stop containers, keep volumes
+docker compose down -v       # also remove HA config data (start fresh)
+```
+
+The HA config under `deploy/ha/` is bind-mounted, so it persists across
+restarts. Delete that directory to reset HA entirely.
+
+### What's in the Stack
+
+```
+.
+├── Dockerfile                          # Multi-stage Go build → distroless runtime
+├── docker-compose.yml                  # CSMS + Mosquitto + HA on panya-net
+├── config.yaml.sample                  # Sample CSMS config (points at mosquitto container)
+└── deploy/
+    ├── mosquitto/mosquitto.conf        # Dev broker config (anonymous, no persistence)
+    └── ha/
+        └── configuration.yaml          # HA seed config (MQTT integration enabled)
+```
+
+> **Production warning:** The dev Mosquitto config allows anonymous access and
+> disables persistence. For real deployments, add authentication, TLS, and
+> persistent client sessions. The bundled compose file is **not** production-ready.
 
 ### Library Usage
 
