@@ -217,7 +217,7 @@ func TestRelay_OnStateChange_NilSafe(t *testing.T) {
 	injectStub(relay, "CP-1", cp)
 
 	relay.Disconnect("CP-1")
-	relay.Connect(context.Background(), "CP-NONE")
+	_ = relay.Connect(context.Background(), "CP-NONE")
 }
 
 func filterEvents(events []struct {

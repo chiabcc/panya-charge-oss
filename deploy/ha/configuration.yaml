@@ -1,0 +1,18 @@
+# Home Assistant configuration for panya-charge-oss dev stack
+# Minimal config — onboarding happens via web UI on first launch.
+
+default_config:
+
+mqtt:
+  broker: mosquitto
+  port: 1883
+  discovery: true
+
+logger:
+  default: info
+  logs:
+    homeassistant.components.mqtt: debug
+
+# If you have Enphase Envoy hardware on the network, add its integration
+# via Settings → Devices & Services after first launch.
+# See docs/enphase-integration.md for the bridging automations.

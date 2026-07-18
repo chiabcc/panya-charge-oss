@@ -139,10 +139,10 @@ func TestInMemorySessionRepository_GetActiveSession(t *testing.T) {
 	repo := NewInMemorySessionRepository()
 
 	now := time.Now()
-	repo.CreateSession(ctx, session.Session{
+	_ = repo.CreateSession(ctx, session.Session{
 		ID: "completed", ChargerID: "C1", ConnectorID: 1, StoppedAt: &now,
 	})
-	repo.CreateSession(ctx, session.Session{
+	_ = repo.CreateSession(ctx, session.Session{
 		ID: "active", TransactionID: 5, ChargerID: "C1", ConnectorID: 1,
 	})
 
@@ -162,7 +162,7 @@ func TestInMemorySessionRepository_GetActiveSession(t *testing.T) {
 
 func TestInMemorySessionRepository_GetSessionByTransactionID(t *testing.T) {
 	repo := NewInMemorySessionRepository()
-	repo.CreateSession(ctx, session.Session{ID: "s1", TransactionID: 10, ChargerID: "C1"})
+	_ = repo.CreateSession(ctx, session.Session{ID: "s1", TransactionID: 10, ChargerID: "C1"})
 
 	got, err := repo.GetSessionByTransactionID(ctx, "C1", 10)
 	require.NoError(t, err)
@@ -285,11 +285,11 @@ func TestInMemoryChargerRepository_Concurrent(t *testing.T) {
 		id := fmt.Sprintf("C-%d", i)
 		go func() {
 			defer wg.Done()
-			repo.UpsertCharger(ctx, charger.Charger{ID: id})
+			_ = repo.UpsertCharger(ctx, charger.Charger{ID: id})
 		}()
 		go func() {
 			defer wg.Done()
-			repo.ListChargers(ctx)
+			_, _ = repo.ListChargers(ctx)
 		}()
 	}
 	wg.Wait()
