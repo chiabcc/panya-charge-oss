@@ -45,4 +45,9 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          # Build from source using the Go toolchain from setup-go (Go 1.25).
+          # Prebuilt binaries may be built with an older Go and fail with
+          # "Go language version used to build golangci-lint is lower than
+          # the targeted Go version".
+          install-mode: goinstall
           args: --timeout=5m
