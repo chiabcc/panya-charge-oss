@@ -102,16 +102,18 @@ stack. It brings up:
 
 ### One-Time Setup
 
-1. Copy the sample CSMS config:
+1. Copy the example CSMS config:
 
    ```bash
-   cp config.yaml.sample config.yaml
+   cp config.yaml.example config.yaml
    ```
 
-   This config points the CSMS at the Mosquitto container (`tcp://mosquitto:1883`)
-   rather than localhost — required for inter-container networking.
+2. Edit `config.yaml` so the CSMS can reach the Mosquitto container — change
+   `mqtt.broker` from `tcp://localhost:1883` to `tcp://mosquitto:1883`, and
+   optionally set a dev client ID (e.g. `panya-charge-dev`). This is required
+   for inter-container networking on `panya-net`.
 
-2. Start the stack:
+3. Start the stack:
 
    ```bash
    docker compose up -d
@@ -120,11 +122,11 @@ stack. It brings up:
    First launch builds the CSMS image from `Dockerfile` (multi-stage Go build,
    ~30s on a warm cache). HA takes 30–60s to initialize on first boot.
 
-3. Open Home Assistant at **http://localhost:8123** and complete onboarding
+4. Open Home Assistant at **http://localhost:8123** and complete onboarding
    (create an account, set location). The MQTT integration is pre-configured
    via `deploy/ha/configuration.yaml` — no manual setup needed.
 
-4. Watch the CSMS logs to confirm MQTT connectivity:
+5. Watch the CSMS logs to confirm MQTT connectivity:
 
    ```bash
    docker compose logs -f csms
@@ -217,7 +219,7 @@ restarts. Delete that directory to reset HA entirely.
 .
 ├── Dockerfile                          # Multi-stage Go build → distroless runtime
 ├── docker-compose.yml                  # CSMS + Mosquitto + HA on panya-net
-├── config.yaml.sample                  # Sample CSMS config (points at mosquitto container)
+├── config.yaml.example                 # CSMS config template (copy → config.yaml, edit broker for compose)
 └── deploy/
     ├── mosquitto/mosquitto.conf        # Dev broker config (anonymous, no persistence)
     └── ha/
