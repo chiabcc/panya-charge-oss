@@ -450,7 +450,7 @@ func TestMockChargerCommander_ErrorInjection(t *testing.T) {
 
 func TestMockChargerCommander_Reset(t *testing.T) {
 	m := mocks.NewMockChargerCommander()
-	m.SetChargingProfile("X", 1, 16)
+	_ = m.SetChargingProfile("X", 1, 16)
 	m.SetChargingProfileErr = errors.New("err")
 	m.Reset()
 

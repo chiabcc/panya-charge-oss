@@ -393,7 +393,7 @@ func TestBuildEnergySensorPayloads_SolarOnly(t *testing.T) {
 		t.Fatalf("expected 1 payload, got %d", len(payloads))
 	}
 	var cfg haSensorConfig
-	json.Unmarshal(payloads[0].encode(), &cfg)
+	_ = json.Unmarshal(payloads[0].encode(), &cfg)
 	if cfg.Name != "Solar Power" {
 		t.Errorf("expected name 'Solar Power', got '%s'", cfg.Name)
 	}
@@ -415,7 +415,7 @@ func TestBuildEnergySensorPayloads_ConsumptionOnly(t *testing.T) {
 		t.Fatalf("expected 1 payload, got %d", len(payloads))
 	}
 	var cfg haSensorConfig
-	json.Unmarshal(payloads[0].encode(), &cfg)
+	_ = json.Unmarshal(payloads[0].encode(), &cfg)
 	if cfg.Name != "Home Consumption" {
 		t.Errorf("expected name 'Home Consumption', got '%s'", cfg.Name)
 	}
