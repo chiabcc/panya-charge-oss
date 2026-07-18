@@ -255,6 +255,13 @@ have two options:
 
 ---
 
+## Vendor-Specific Guides
+
+- [Enphase Envoy Integration](enphase-integration.md) — bridging Enphase solar
+  production and consumption sensors for solar surplus smart charging
+
+---
+
 ## Manual Control
 
 You can control the charger manually via the HA UI entities, or directly
