@@ -119,6 +119,8 @@ func New(cfg config.Config) (*CSMS, error) {
 		commander:   commander,
 		chargerRepo: chargerRepo,
 		sessionRepo: sessionRepo,
+		publisher:   publisher,
+		controller:  controller,
 		logger:      logger,
 	}
 
@@ -157,6 +159,9 @@ func (c *CSMS) Start(ctx context.Context) error {
 
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancelFn = cancel
+
+	c.publisher.PublishGlobalDiscovery()
+	c.publisher.PublishSmartChargingEnabled(c.controller.IsEnabled())
 
 	c.server.Start()
 
@@ -261,7 +266,14 @@ type cmdBridge struct {
 	commander   ports.ChargerCommander
 	chargerRepo ports.ChargerRepository
 	sessionRepo ports.SessionRepository
+	publisher   ports.EventPublisher
+	controller  smartChargingToggle
 	logger      *slog.Logger
+}
+
+type smartChargingToggle interface {
+	SetEnabled(enabled bool)
+	IsEnabled() bool
 }
 
 func (b *cmdBridge) OnSetAmps(chargerID string, amps int) {
@@ -321,6 +333,17 @@ func (b *cmdBridge) OnSetState(chargerID string, charging bool) {
 		} else {
 			b.stopCharging(ctx, id)
 		}
+	}
+}
+
+func (b *cmdBridge) OnSetSmartCharging(enabled bool) {
+	if b.controller == nil {
+		b.logger.Warn("smart charging toggle received but controller not wired")
+		return
+	}
+	b.controller.SetEnabled(enabled)
+	if b.publisher != nil {
+		b.publisher.PublishSmartChargingEnabled(enabled)
 	}
 }
 

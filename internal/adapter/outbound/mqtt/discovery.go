@@ -260,6 +260,39 @@ func discoveryNodeID(chargerID string) string {
 	return "panya-charge-" + sanitizeID(chargerID)
 }
 
+// PublishGlobalDiscovery publishes HA MQTT discovery payloads for entities that
+// are not tied to a specific charger (e.g. the global smart-charging switch).
+// Must be called once on CSMS startup so HA picks up the global entity.
+func (p *Publisher) PublishGlobalDiscovery() {
+	const nodeID = "panya-charge"
+	stateTopic := fmt.Sprintf("%s/smart_charging/state", p.baseTopic)
+	commandTopic := fmt.Sprintf("%s/smart_charging/command", p.baseTopic)
+
+	device := haDevice{
+		Identifiers:  []string{nodeID},
+		Manufacturer: "Panya",
+		Model:        "CSMS",
+		Name:         "Panya Charge",
+	}
+
+	payload := haSwitchConfig{
+		Name:         "Smart Charging",
+		StateTopic:   stateTopic,
+		CommandTopic: commandTopic,
+		UniqueID:     nodeID + "-smart-charging",
+		Device:       device,
+		PayloadOn:    "ON",
+		PayloadOff:   "OFF",
+		StateOn:      "ON",
+		StateOff:     "OFF",
+		Icon:         "mdi:solar-power",
+	}
+
+	topic := fmt.Sprintf("homeassistant/switch/%s/smart_charging/config", nodeID)
+	p.client.Publish(topic, 1, true, discoveryPayload{payload: payload}.encode())
+	p.logger.Info("published global HA discovery", "entity", "switch.smart_charging")
+}
+
 // sanitizeID replaces characters that are invalid in MQTT topics or HA entity IDs.
 func sanitizeID(s string) string {
 	s = strings.ToLower(s)

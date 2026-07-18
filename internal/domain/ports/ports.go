@@ -65,6 +65,7 @@ type EventPublisher interface {
 	PublishChargerCurrent(chargerID string, amps int)
 	PublishChargingState(chargerID string, charging bool)
 	PublishProxyState(chargerID string, connected bool)
+	PublishSmartChargingEnabled(enabled bool)
 }
 
 // DiscoveryPublisher publishes Home Assistant MQTT auto-discovery payloads.
@@ -77,6 +78,7 @@ type DiscoveryPublisher interface {
 type CommandReceiver interface {
 	OnSetAmps(chargerID string, amps int)
 	OnSetState(chargerID string, charging bool)
+	OnSetSmartCharging(enabled bool)
 }
 
 // EnergySource provides real-time power readings from grid, solar, and
