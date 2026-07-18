@@ -1,0 +1,60 @@
+# Development compose stack — panya-charge-oss + Mosquitto + Home Assistant
+#
+# Brings up a full local dev environment for end-to-end testing:
+#   - panya-charge-oss CSMS  (port 8887 for OCPP, runs your local source)
+#   - Mosquitto broker       (port 1883)
+#   - Home Assistant         (port 8123, auto-discovers charger entities)
+#
+# Quick start:
+#   docker compose up -d
+#   open http://localhost:8123
+#
+# Point your charger (or simulator) at: ws://<host-ip>:8887/{ws}
+
+services:
+  csms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: panya-charge-oss:dev
+    container_name: panya-csms
+    restart: unless-stopped
+    ports:
+      - "8887:8887"
+    volumes:
+      # Mount config so you can edit without rebuilding
+      - ./config.yaml:/data/config.yaml:ro
+    networks:
+      - panya-net
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: panya-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./deploy/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    networks:
+      - panya-net
+
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: panya-ha
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    volumes:
+      - ./deploy/ha:/config
+    # HA needs host mode for mDNS discovery in real deployments,
+    # but for dev we use bridge mode + explicit MQTT config.
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - mosquitto
+    networks:
+      - panya-net
+
+networks:
+  panya-net:
+    driver: bridge

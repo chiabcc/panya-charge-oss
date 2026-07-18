@@ -1,0 +1,24 @@
+# Sample config for panya-charge-oss dev stack (docker compose)
+# Mount this file into the CSMS container at /data/config.yaml.
+
+server:
+  ocpp_port: 8887
+  ocpp_path: "/{ws}"
+  log_level: debug
+  log_format: text
+
+mqtt:
+  broker: "tcp://mosquitto:1883"
+  client_id: "panya-charge-dev"
+  base_topic: "panya"
+  disconnect_threshold_sec: 60
+  topics:
+    grid_power: "grid/power"
+    # solar_power: "solar/power"
+    # consumption_power: "home/power"
+
+charging:
+  min_amps: 6
+  max_amps: 32
+  contactor_cooldown_sec: 180
+  default_amps: 6
