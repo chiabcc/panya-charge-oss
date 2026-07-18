@@ -102,16 +102,18 @@ stack. It brings up:
 
 ### One-Time Setup
 
-1. Copy the example CSMS config:
+1. Copy the example CSMS config (**required** — without this, Docker creates
+   `config.yaml` as an empty directory and the CSMS crash-loops):
 
    ```bash
    cp config.yaml.example config.yaml
    ```
 
-2. Edit `config.yaml` so the CSMS can reach the Mosquitto container — change
-   `mqtt.broker` from `tcp://localhost:1883` to `tcp://mosquitto:1883`, and
-   optionally set a dev client ID (e.g. `panya-charge-dev`). This is required
-   for inter-container networking on `panya-net`.
+2. The Mosquitto broker hostname is pre-set via the `PANYA_MQTT_BROKER`
+   environment override in `docker-compose.yml` (`tcp://mosquitto:1883`), so
+   you don't need to edit `config.yaml` for inter-container networking.
+   Optionally tweak `client_id` (e.g. `panya-charge-dev`) if you run multiple
+   CSMS instances against the same broker.
 
 3. Start the stack:
 

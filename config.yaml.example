@@ -9,7 +9,7 @@ server:
   # log_format: text           # text | json (unset = text)
 
 mqtt:
-  broker: "tcp://localhost:1883"  # MQTT broker URL (use core-mosquitto for HA add-on)
+  broker: "tcp://localhost:1883"  # MQTT broker URL. In docker compose, use tcp://mosquitto:1883
   client_id: "panya-charge"       # MQTT client ID
   # username: ""                  # broker username (omit if no auth)
   # password: ""                  # broker password (omit if no auth)
