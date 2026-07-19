@@ -3,10 +3,7 @@
 
 default_config:
 
-mqtt:
-  broker: mosquitto
-  port: 1883
-  discovery: true
+mqtt: {}
 
 logger:
   default: info

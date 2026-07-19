@@ -32,3 +32,5 @@ go.work.sum
 .sisyphus/
 
 config.yml
+
+.omo

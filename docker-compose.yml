@@ -16,7 +16,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: panya-charge-oss:dev
     container_name: panya-csms
     restart: unless-stopped
     ports:
@@ -24,6 +23,11 @@ services:
     volumes:
       # Mount config so you can edit without rebuilding
       - ./config.yaml:/data/config.yaml:ro
+    environment:
+      # Override default localhost:1883 — inside the container, the broker is reached by service name.
+      - PANYA_MQTT_BROKER=tcp://mosquitto:1883
+    depends_on:
+      - mosquitto
     networks:
       - panya-net
 
