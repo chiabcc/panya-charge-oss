@@ -3,6 +3,9 @@
 /panya-charge-oss.exe
 /bin/
 
+# Air hot reload
+/tmp/
+
 # Config (may contain secrets)
 config.yaml
 config.local.yaml
