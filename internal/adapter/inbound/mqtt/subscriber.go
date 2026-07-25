@@ -15,6 +15,7 @@ import (
 type CommandHandler interface {
 	OnSetAmps(chargerID string, amps int)
 	OnSetState(chargerID string, charging bool)
+	OnSetSmartCharging(enabled bool)
 }
 
 type Subscriber struct {
@@ -87,6 +88,7 @@ func (s *Subscriber) subscribe(c mqtt.Client) error {
 		{s.fullTopic(s.topics["grid_power"]), s.handleGridPower},
 		{s.fullTopic(s.topics["command_set_amps"]), s.handleSetAmpsGlobal},
 		{s.fullTopic(s.topics["command_state"]), s.handleSetStateGlobal},
+		{s.fullTopic(s.topics["smart_charging_command"]), s.handleSmartChargingCommand},
 		{s.baseTopic + "/charge/+/command/set_amps", s.handleSetAmpsPerCharger},
 		{s.baseTopic + "/charge/+/command/state", s.handleSetStatePerCharger},
 	}
@@ -177,6 +179,14 @@ func (s *Subscriber) handleSetStateGlobal(_ mqtt.Client, msg mqtt.Message) {
 	charging := payload == "1" || payload == "true" || payload == "ON" || payload == "start"
 	if s.cmdHandler != nil {
 		s.cmdHandler.OnSetState("", charging)
+	}
+}
+
+func (s *Subscriber) handleSmartChargingCommand(_ mqtt.Client, msg mqtt.Message) {
+	payload := string(msg.Payload())
+	enabled := payload == "1" || payload == "true" || payload == "ON"
+	if s.cmdHandler != nil {
+		s.cmdHandler.OnSetSmartCharging(enabled)
 	}
 }
 

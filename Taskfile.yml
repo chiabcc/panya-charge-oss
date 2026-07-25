@@ -1,0 +1,57 @@
+version: '3'
+
+vars:
+  APP: panya-charge-oss
+  CMD: ./cmd/panya-charge-oss
+  BIN: bin/{{.APP}}
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  ## -- Build --
+  build:
+    desc: Build the application
+    cmds:
+      - go build -o {{.BIN}} {{.CMD}}
+
+  ## -- Development --
+  dev:
+    desc: Run with hot reload (air)
+    cmds:
+      - air
+    silent: true
+
+  ## -- Test --
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -race ./...
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - go test -race -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  ## -- Lint --
+  lint:
+    desc: Run static analysis
+    cmds:
+      - go vet ./...
+
+  ## -- Clean --
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin/
+      - rm -f coverage.out coverage.html
+
+  ## -- Install tools --
+  tools:
+    desc: Install development tools
+    cmds:
+      - go install github.com/air-verse/air@latest
+      - go install github.com/go-task/task/v3/cmd/task@latest

@@ -355,27 +355,34 @@ type ProxyStatePublish struct {
 	Connected bool
 }
 
+// SmartChargingPublish captures a PublishSmartChargingEnabled call.
+type SmartChargingPublish struct {
+	Enabled bool
+}
+
 // MockEventPublisher implements ports.EventPublisher.
 type MockEventPublisher struct {
-	mu                sync.Mutex
-	StatusPublished   []StatusPublish
-	PowerPublished    []PowerPublish
-	EnergyPublished   []EnergyPublish
-	OnlinePublished   []OnlinePublish
-	CurrentPublished  []CurrentPublish
-	ChargingPublished []ChargingPublish
-	ProxyPublished    []ProxyStatePublish
+	mu                       sync.Mutex
+	StatusPublished          []StatusPublish
+	PowerPublished           []PowerPublish
+	EnergyPublished          []EnergyPublish
+	OnlinePublished          []OnlinePublish
+	CurrentPublished         []CurrentPublish
+	ChargingPublished        []ChargingPublish
+	ProxyPublished           []ProxyStatePublish
+	SmartChargingPublished   []SmartChargingPublish
 }
 
 func NewMockEventPublisher() *MockEventPublisher {
 	return &MockEventPublisher{
-		StatusPublished:   make([]StatusPublish, 0),
-		PowerPublished:    make([]PowerPublish, 0),
-		EnergyPublished:   make([]EnergyPublish, 0),
-		OnlinePublished:   make([]OnlinePublish, 0),
-		CurrentPublished:  make([]CurrentPublish, 0),
-		ChargingPublished: make([]ChargingPublish, 0),
-		ProxyPublished:    make([]ProxyStatePublish, 0),
+		StatusPublished:        make([]StatusPublish, 0),
+		PowerPublished:         make([]PowerPublish, 0),
+		EnergyPublished:        make([]EnergyPublish, 0),
+		OnlinePublished:        make([]OnlinePublish, 0),
+		CurrentPublished:       make([]CurrentPublish, 0),
+		ChargingPublished:      make([]ChargingPublish, 0),
+		ProxyPublished:         make([]ProxyStatePublish, 0),
+		SmartChargingPublished: make([]SmartChargingPublish, 0),
 	}
 }
 
@@ -419,6 +426,12 @@ func (m *MockEventPublisher) PublishProxyState(chargerID string, connected bool)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ProxyPublished = append(m.ProxyPublished, ProxyStatePublish{ChargerID: chargerID, Connected: connected})
+}
+
+func (m *MockEventPublisher) PublishSmartChargingEnabled(enabled bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.SmartChargingPublished = append(m.SmartChargingPublished, SmartChargingPublish{Enabled: enabled})
 }
 
 func (m *MockEventPublisher) LastStatus(chargerID string) (charger.ConnectorStatus, bool) {
@@ -486,6 +499,7 @@ func (m *MockEventPublisher) Reset() {
 	m.CurrentPublished = m.CurrentPublished[:0]
 	m.ChargingPublished = m.ChargingPublished[:0]
 	m.ProxyPublished = m.ProxyPublished[:0]
+	m.SmartChargingPublished = m.SmartChargingPublished[:0]
 }
 
 // DiscoveryCall captures a PublishDiscovery call.
@@ -669,17 +683,24 @@ type SetStateCall struct {
 	Charging  bool
 }
 
+// SetSmartChargingCall records an OnSetSmartCharging call.
+type SetSmartChargingCall struct {
+	Enabled bool
+}
+
 // MockCommandReceiver implements ports.CommandReceiver.
 type MockCommandReceiver struct {
-	mu            sync.Mutex
-	SetAmpsCalls  []SetAmpsCall
-	SetStateCalls []SetStateCall
+	mu                   sync.Mutex
+	SetAmpsCalls         []SetAmpsCall
+	SetStateCalls        []SetStateCall
+	SetSmartChargingCalls []SetSmartChargingCall
 }
 
 func NewMockCommandReceiver() *MockCommandReceiver {
 	return &MockCommandReceiver{
-		SetAmpsCalls:  make([]SetAmpsCall, 0),
-		SetStateCalls: make([]SetStateCall, 0),
+		SetAmpsCalls:          make([]SetAmpsCall, 0),
+		SetStateCalls:         make([]SetStateCall, 0),
+		SetSmartChargingCalls: make([]SetSmartChargingCall, 0),
 	}
 }
 
@@ -695,11 +716,18 @@ func (m *MockCommandReceiver) OnSetState(chargerID string, charging bool) {
 	m.SetStateCalls = append(m.SetStateCalls, SetStateCall{ChargerID: chargerID, Charging: charging})
 }
 
+func (m *MockCommandReceiver) OnSetSmartCharging(enabled bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.SetSmartChargingCalls = append(m.SetSmartChargingCalls, SetSmartChargingCall{Enabled: enabled})
+}
+
 func (m *MockCommandReceiver) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.SetAmpsCalls = m.SetAmpsCalls[:0]
 	m.SetStateCalls = m.SetStateCalls[:0]
+	m.SetSmartChargingCalls = m.SetSmartChargingCalls[:0]
 }
 
 type MockProxyConfigRepo struct {

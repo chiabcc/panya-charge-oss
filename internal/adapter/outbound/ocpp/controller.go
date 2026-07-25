@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chiabcc/panya-charge-oss/internal/domain/charger"
@@ -26,6 +27,7 @@ type Controller struct {
 	lastSetAmps    sync.Map
 	lastShouldStop sync.Map
 	emitter        EventEmitter
+	enabled        atomic.Bool
 }
 
 func NewController(
@@ -39,7 +41,7 @@ func NewController(
 	staleTimeout time.Duration,
 	logger *slog.Logger,
 ) *Controller {
-	return &Controller{
+	c := &Controller{
 		commander:    cmd,
 		chargerRepo:  cr,
 		energySource: energy,
@@ -50,6 +52,23 @@ func NewController(
 		staleTimeout: staleTimeout,
 		logger:       logger,
 	}
+	c.enabled.Store(true)
+	return c
+}
+
+// SetEnabled toggles the smart-charging loop. When false, tick() short-circuits
+// and manual control via the per-charger switches/number entities takes over.
+func (c *Controller) SetEnabled(enabled bool) {
+	prev := c.enabled.Swap(enabled)
+	if prev == enabled {
+		return
+	}
+	c.logger.Info("smart charging toggled", "enabled", enabled)
+}
+
+// IsEnabled reports whether the smart-charging loop is currently active.
+func (c *Controller) IsEnabled() bool {
+	return c.enabled.Load()
 }
 
 func (c *Controller) SetEmitter(e EventEmitter) {
@@ -81,6 +100,9 @@ func (c *Controller) Run(ctx context.Context) {
 }
 
 func (c *Controller) tick(ctx context.Context) {
+	if !c.enabled.Load() {
+		return
+	}
 	if c.energySource.IsStale(c.staleTimeout) {
 		c.logger.Warn("energy data stale — reverting all chargers to safe state",
 			"threshold", c.staleTimeout)

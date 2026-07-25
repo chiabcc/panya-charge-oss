@@ -98,6 +98,14 @@ func (p *Publisher) PublishProxyState(chargerID string, connected bool) {
 	p.publish(fmt.Sprintf("charge/%s/proxy_connected", chargerID), val, true)
 }
 
+func (p *Publisher) PublishSmartChargingEnabled(enabled bool) {
+	val := "OFF"
+	if enabled {
+		val = "ON"
+	}
+	p.publish("smart_charging/state", val, true)
+}
+
 func (p *Publisher) Subscribe(topic string, handler mqtt.MessageHandler) error {
 	fullTopic := fmt.Sprintf("%s/%s", p.baseTopic, topic)
 	if token := p.client.Subscribe(fullTopic, 1, handler); token.Wait() && token.Error() != nil {
