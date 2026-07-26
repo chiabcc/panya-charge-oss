@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,18 +45,73 @@ type applyResult struct {
 	ErrorMessage               string   `json:"error_message,omitempty"`
 }
 
-// confirmEntry holds a single-use confirm token.
+// confirmEntry holds a single-use confirm token and the pending candidate.
 type confirmEntry struct {
-	nonce   string
-	fields  []string
-	expires time.Time
-	used    bool
+	nonce      string
+	fields     []string
+	expires    time.Time
+	used       bool
+	candidate  *config.Config
+	reason     string // hot, rebuild, process_restart
 }
 
 func newConfirmToken() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+type configFieldVM struct {
+	Name         string
+	Value        string
+	Disabled     bool
+	Secret       bool
+	ApplyClass   string
+	PasswordSet  bool
+	TokenSet     bool
+}
+
+type configSectionVM struct {
+	Title  string
+	Fields []configFieldVM
+}
+
+type configFormVM struct {
+	Sections map[string]*configSectionVM
+	Result   template.HTML
+}
+
+type resultVM struct {
+	Message                string
+	FieldsChanged          []string
+	ActiveSession          bool
+	ChargerReconfigureRequired bool
+	ConfirmToken           string
+	ResultClass            string
+}
+
+func templateFuncs() template.FuncMap {
+	return template.FuncMap{
+		"envBadge": func(field string) string {
+			return dotToEnv(field)
+		},
+		"renderError": func(msg string) template.HTML {
+			return template.HTML(fmt.Sprintf(`<div class="frag-error">%s</div>`,
+				template.HTMLEscapeString(msg)))
+		},
+		"dict": func(args ...any) map[string]any {
+			if len(args) == 0 || len(args)%2 != 0 {
+				return nil
+			}
+			d := make(map[string]any, len(args)/2)
+			for i := 0; i < len(args); i += 2 {
+				if key, ok := args[i].(string); ok {
+					d[key] = args[i+1]
+				}
+			}
+			return d
+		},
+	}
 }
 
 // NewServer constructs a WebUI server.
@@ -69,13 +125,23 @@ func newConfirmToken() string {
 func NewServer(configPath string, listenAddr string, token string, isLoopback bool, applier Applier) *Server {
 	mux := http.NewServeMux()
 
+	tmpl, err := template.New("webui").Funcs(templateFuncs()).ParseFS(staticFS,
+		"templates/login.html",
+		"templates/config.html",
+		"templates/fragments.html",
+	)
+	if err != nil {
+		slog.Error("parse webui templates", "error", err)
+		tmpl = template.Must(template.ParseFS(staticFS, "templates/login.html"))
+	}
+
 	srv := &Server{
 		mux:        mux,
 		configPath: configPath,
 		listenAddr: listenAddr,
 		token:      token,
 		isLoopback: isLoopback,
-		template:   template.Must(template.ParseFS(staticFS, "templates/login.html")),
+		template:   tmpl,
 		applier:    applier,
 	}
 
@@ -225,81 +291,192 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dto := buildConfigDTO(ec)
+	accept := r.Header.Get("Accept")
+	if strings.Contains(accept, "application/json") {
+		dto := buildConfigDTO(ec)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(dto); err != nil {
+			slog.Error("encode config DTO", "error", err)
+		}
+		return
+	}
+
+	vm := buildConfigFormVM(ec)
+	if isHtmxRequest(r) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.template.ExecuteTemplate(w, "fragments.html", vm); err != nil {
+			slog.Error("render config fragment template", "error", err)
+		}
+		return
+	}
+if isHtmxRequest(r) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.template.ExecuteTemplate(w, "fragments.html", vm); err != nil {
+			slog.Error("render config fragment template", "error", err)
+		}
+		return
+	}
+	// Default: serve JSON for API/programmatic requests (tests, CLI, etc.)
 	w.Header().Set("Content-Type", "application/json")
+	dto := buildConfigDTO(ec)
 	if err := json.NewEncoder(w).Encode(dto); err != nil {
 		slog.Error("encode config DTO", "error", err)
 	}
+}
+
+var applyClasses = map[string]string{
+	"server.ocpp_port":                "rebuild",
+	"server.ocpp_path":                "rebuild",
+	"server.log_level":                "hot",
+	"server.log_format":               "rebuild",
+	"mqtt.broker":                     "rebuild",
+	"mqtt.client_id":                  "rebuild",
+	"mqtt.username":                   "rebuild",
+	"mqtt.password":                   "rebuild",
+	"mqtt.base_topic":                 "rebuild",
+	"mqtt.topics.*":                   "rebuild",
+	"mqtt.disconnect_threshold_sec":   "rebuild",
+	"charging.min_amps":               "hot",
+	"charging.max_amps":               "hot",
+	"charging.contactor_cooldown_sec": "hot",
+	"charging.default_amps":           "hot",
+	"webui.enabled":                   "process_restart",
+	"webui.listen":                    "process_restart",
+	"webui.token":                     "hot",
+}
+
+func buildConfigFormVM(ec *config.EffectiveConfig) *configFormVM {
+	ovf := ec.OverriddenByEnv
+	sections := map[string]*configSectionVM{
+		"server":   {Title: "Server", Fields: []configFieldVM{}},
+		"mqtt":     {Title: "MQTT", Fields: []configFieldVM{}},
+		"charging": {Title: "Charging", Fields: []configFieldVM{}},
+		"webui":    {Title: "WebUI", Fields: []configFieldVM{}},
+	}
+
+	vf := func(section, name string, val any, secret, passwordSet, tokenSet bool) {
+		sval := ""
+		switch v := val.(type) {
+		case int:
+			sval = strconv.Itoa(v)
+		case bool:
+			sval = strconv.FormatBool(v)
+		case string:
+			sval = v
+		}
+		sections[section].Fields = append(sections[section].Fields, configFieldVM{
+			Name:        name,
+			Value:       sval,
+			Disabled:    ovf[name],
+			Secret:      secret,
+			ApplyClass:  applyClasses[name],
+			PasswordSet: passwordSet,
+			TokenSet:    tokenSet,
+		})
+	}
+
+	vf("server", "server.ocpp_port", ec.ServerOCPPPort, false, false, false)
+	vf("server", "server.ocpp_path", ec.ServerOCPPPath, false, false, false)
+	vf("server", "server.log_level", ec.ServerLogLevel, false, false, false)
+	vf("server", "server.log_format", ec.ServerLogFormat, false, false, false)
+
+	vf("mqtt", "mqtt.broker", ec.MQTTBroker, false, false, false)
+	vf("mqtt", "mqtt.client_id", ec.MQTTClientID, false, false, false)
+	vf("mqtt", "mqtt.username", ec.MQTTUsername, false, false, false)
+	vf("mqtt", "mqtt.password", "", true, ec.MQTTPasswordSet, false)
+	vf("mqtt", "mqtt.base_topic", ec.MQTTBaseTopic, false, false, false)
+	vf("mqtt", "mqtt.disconnect_threshold_sec", ec.MQTTDisconnectSec, false, false, false)
+
+	vf("charging", "charging.min_amps", ec.ChargingMinAmps, false, false, false)
+	vf("charging", "charging.max_amps", ec.ChargingMaxAmps, false, false, false)
+	vf("charging", "charging.contactor_cooldown_sec", ec.ChargingContactorsSec, false, false, false)
+	vf("charging", "charging.default_amps", ec.ChargingDefaultAmps, false, false, false)
+
+	vf("webui", "webui.enabled", ec.WebUIEnabled, false, false, false)
+	vf("webui", "webui.listen", ec.WebUIListen, false, false, false)
+	vf("webui", "webui.token", "", true, false, ec.WebUITokenSet)
+
+	return &configFormVM{Sections: sections}
 }
 
 func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// PARSE — read form or JSON body
+	htmx := isHtmxRequest(r)
+
 	if err := r.ParseForm(); err != nil {
-		jsonError(w, "parse form: "+err.Error(), http.StatusBadRequest)
+		errMsg := "parse form: " + err.Error()
+		if htmx {
+			renderHTMLError(w, errMsg, http.StatusBadRequest)
+		} else {
+			jsonError(w, errMsg, http.StatusBadRequest)
+		}
 		return
 	}
 
-	// LOAD — read current config from disk
 	current, err := config.Load(s.configPath)
 	if err != nil {
 		slog.Error("load effective config for save", "error", err)
-		jsonError(w, "internal server error", http.StatusInternalServerError)
+		errMsg := "internal server error"
+		if htmx {
+			renderHTMLError(w, errMsg, http.StatusInternalServerError)
+		} else {
+			jsonError(w, errMsg, http.StatusInternalServerError)
+		}
 		return
 	}
 
-	// Read env override map (from Effective two-pass)
 	ec, err := config.Effective(s.configPath)
 	if err != nil {
 		slog.Error("read effective config for save", "error", err)
-		jsonError(w, "internal server error", http.StatusInternalServerError)
+		errMsg := "internal server error"
+		if htmx {
+			renderHTMLError(w, errMsg, http.StatusInternalServerError)
+		} else {
+			jsonError(w, errMsg, http.StatusInternalServerError)
+		}
 		return
 	}
 
-	// GUARD — reject changes to env-overridden fields
 	for field := range r.Form {
 		if ec.OverriddenByEnv[field] {
 			envVar := dotToEnv(field)
 			slog.Warn("webui_config_rejected", "field", field, "env_var", envVar)
-			jsonError(w, fmt.Sprintf("cannot change %s: overridden by environment variable %s", field, envVar), http.StatusBadRequest)
+			errMsg := fmt.Sprintf("cannot change %s: overridden by environment variable %s", field, envVar)
+			if htmx {
+				renderHTMLError(w, errMsg, http.StatusBadRequest)
+			} else {
+				jsonError(w, errMsg, http.StatusBadRequest)
+			}
 			return
 		}
 	}
 
-	// BUILD — merge submitted form values into a candidate Config
 	candidate := cloneConfig(current)
 	applyFormValues(candidate, r.Form, current)
 
-	// SECRET PRESERVATION — empty password/token keeps existing value
 	if r.Form.Get("mqtt.password") == "" && !wasPasswordChanged(r.Form) {
-		// keep existing (already copied via clone)
 	}
 	if r.Form.Get("webui.token") == "" && !wasTokenChanged(r.Form) {
-		// keep existing (already copied via clone)
 	}
 
-	// VALIDATE — validate candidate config
 	if err := config.Validate(candidate); err != nil {
 		slog.Warn("webui_config_rejected", "reason", "validation", "error", err)
-		jsonError(w, "validation failed: "+err.Error(), http.StatusBadRequest)
+		errMsg := "validation failed: " + err.Error()
+		if htmx {
+			renderHTMLError(w, errMsg, http.StatusBadRequest)
+		} else {
+			jsonError(w, errMsg, http.StatusBadRequest)
+		}
 		return
 	}
 
-	// CLASSIFY
 	report := config.ClassifyChanges(current, candidate)
-	if report.Class == config.ApplyNone {
-		writeJSON(w, applyResult{Action: "none", FieldsChanged: []string{}})
-		return
-	}
 
-	// For rebuild-class: check confirm-token first
-	if report.Class == config.ApplyRebuild || report.Class == config.ApplyProcessRestart {
-		submittedToken := r.FormValue("confirm_token")
-		if submittedToken == "" && s.confirm != nil {
-			// Need confirmation and we have a token — check if user is confirming
-			// Return the confirm-required response
+	submittedToken := r.FormValue("confirm_token")
+	if submittedToken == "" && s.confirm != nil {
+		if report.Class == config.ApplyRebuild || report.Class == config.ApplyProcessRestart {
 			_, hasActive := falseActiveSession(s.applier)
 			activeResult := applyResult{
 				Action:                     "rebuild",
@@ -315,22 +492,30 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 				activeResult.RequiresRebuild = false
 				activeResult.ConfirmToken = ""
 			}
-			writeJSON(w, activeResult)
+			s.renderResult(w, r, &activeResult)
 			return
 		}
 	}
 
-	// PERSIST — atomic write first (disk is source of truth)
-	if err := config.WriteAtomic(s.configPath, candidate); err != nil {
-		slog.Error("atomic write failed", "error", err)
-		jsonError(w, "atomic write failed: "+err.Error(), http.StatusInternalServerError)
+	if report.Class == config.ApplyNone {
+		s.renderResult(w, r, &applyResult{Action: "none", FieldsChanged: []string{}})
 		return
 	}
 
-	// Process restart: always return process_restart response (no applier needed)
+	// Process restart: save to disk immediately, no rebuild possible
 	if report.Class == config.ApplyProcessRestart {
+		if err := config.WriteAtomic(s.configPath, candidate); err != nil {
+			slog.Error("atomic write failed", "error", err)
+			errMsg := "atomic write failed: " + err.Error()
+			if htmx {
+				renderHTMLError(w, errMsg, http.StatusInternalServerError)
+			} else {
+				jsonError(w, errMsg, http.StatusInternalServerError)
+			}
+			return
+		}
 		logAudit(slog.LevelInfo, "webui_config_saved", report.Fields, "process_restart", false, nil)
-		writeJSON(w, applyResult{
+		s.renderResult(w, r, &applyResult{
 			Action:          "process_restart",
 			FieldsChanged:   report.Fields,
 			RestartRequired: true,
@@ -338,30 +523,20 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For rebuild-class, if we have an applier, check active session
-	if (report.Class == config.ApplyRebuild || report.Class == config.ApplyProcessRestart) && s.applier != nil {
+	// Rebuild: check active session before saving
+	if s.applier != nil {
 		chargerIDs, hasActive := s.applier.HasActiveSession()
 
-		// Process restart: just saved to disk, no apply
-		if report.Class == config.ApplyProcessRestart {
-			logAudit(slog.LevelInfo, "webui_config_saved", report.Fields, "process_restart", hasActive, chargerIDs)
-			writeJSON(w, applyResult{
-				Action:          "process_restart",
-				FieldsChanged:   report.Fields,
-				RestartRequired: true,
-				ActiveSession:   hasActive,
-			})
-			return
-		}
-
-		// Rebuild: if active session, require confirm
 		if hasActive {
-			// Generate confirm token
 			nonce := newConfirmToken()
-			s.confirm = &confirmEntry{nonce: nonce, fields: report.Fields, expires: time.Now().Add(5 * time.Minute)}
-
+			s.confirm = &confirmEntry{
+				nonce:     nonce,
+				fields:    report.Fields,
+				expires:   time.Now().Add(5 * time.Minute),
+				candidate: candidate,
+			}
 			logAudit(slog.LevelInfo, "webui_config_saved", report.Fields, "rebuild_pending", hasActive, chargerIDs)
-			writeJSON(w, applyResult{
+			s.renderResult(w, r, &applyResult{
 				Action:                     "rebuild",
 				FieldsChanged:              report.Fields,
 				RequiresRebuild:            true,
@@ -372,16 +547,32 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// No active session — execute rebuild immediately
+		// PERSIST + REBUILD — no active session, safe to proceed
+		if err := config.WriteAtomic(s.configPath, candidate); err != nil {
+			slog.Error("atomic write failed", "error", err)
+			errMsg := "atomic write failed: " + err.Error()
+			if htmx {
+				renderHTMLError(w, errMsg, http.StatusInternalServerError)
+			} else {
+				jsonError(w, errMsg, http.StatusInternalServerError)
+			}
+			return
+		}
+
 		startTime := time.Now()
 		if err := s.applier.Rebuild(candidate); err != nil {
 			slog.Error("webui_rebuild_failed", "error", err, "duration_ms", time.Since(startTime).Milliseconds())
-			jsonError(w, "rebuild failed: "+err.Error(), http.StatusInternalServerError)
+			errMsg := "rebuild failed: " + err.Error()
+			if htmx {
+				renderHTMLError(w, errMsg, http.StatusInternalServerError)
+			} else {
+				jsonError(w, errMsg, http.StatusInternalServerError)
+			}
 			return
 		}
 
 		logAudit(slog.LevelInfo, "webui_rebuild_completed", report.Fields, "rebuild", false, nil)
-		writeJSON(w, applyResult{
+		s.renderResult(w, r, &applyResult{
 			Action:                     "rebuild",
 			FieldsChanged:              report.Fields,
 			ChargerReconfigureRequired: report.ChargerReconfigureRequired,
@@ -389,17 +580,35 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hot apply (no applier needed for basic hot path in tests)
-	if s.applier != nil && report.Class == config.ApplyHot {
-		if err := applyHot(s.applier, current, candidate); err != nil {
-			slog.Error("hot apply failed", "error", err)
-			jsonError(w, "apply failed: "+err.Error(), http.StatusInternalServerError)
-			return
+	// No applier: hot reload or fallback
+	if report.Class == config.ApplyHot {
+		if s.applier != nil {
+			if err := applyHot(s.applier, current, candidate); err != nil {
+				slog.Error("hot apply failed", "error", err)
+				errMsg := "apply failed: " + err.Error()
+				if htmx {
+					renderHTMLError(w, errMsg, http.StatusInternalServerError)
+				} else {
+					jsonError(w, errMsg, http.StatusInternalServerError)
+				}
+				return
+			}
 		}
 	}
 
+	if err := config.WriteAtomic(s.configPath, candidate); err != nil {
+		slog.Error("atomic write failed", "error", err)
+		errMsg := "atomic write failed: " + err.Error()
+		if htmx {
+			renderHTMLError(w, errMsg, http.StatusInternalServerError)
+		} else {
+			jsonError(w, errMsg, http.StatusInternalServerError)
+		}
+		return
+	}
+
 	logAudit(slog.LevelInfo, "webui_config_saved", report.Fields, "hot_reload", false, nil)
-	writeJSON(w, applyResult{
+	s.renderResult(w, r, &applyResult{
 		Action:        "hot_reload",
 		FieldsChanged: report.Fields,
 	})
@@ -578,7 +787,52 @@ func writeJSON(w http.ResponseWriter, r interface{}) {
 	_ = json.NewEncoder(w).Encode(r)
 }
 
-// subtleValidate compares two strings in constant time to prevent timing attacks.
+func isHtmxRequest(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true"
+}
+
+func renderHTMLError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(code)
+	_, _ = w.Write([]byte(fmt.Sprintf(`<div class="frag-error">%s</div>`, template.HTMLEscapeString(msg))))
+}
+
+func (s *Server) renderResult(w http.ResponseWriter, r *http.Request, ar *applyResult) {
+	if !isHtmxRequest(r) {
+		writeJSON(w, ar)
+		return
+	}
+
+	vm := &resultVM{
+		FieldsChanged:              ar.FieldsChanged,
+		ActiveSession:              ar.ActiveSession,
+		ChargerReconfigureRequired: ar.ChargerReconfigureRequired,
+		ConfirmToken:               ar.ConfirmToken,
+	}
+
+	switch ar.Action {
+	case "hot_reload":
+		vm.ResultClass = "fragHot"
+	case "process_restart":
+		vm.ResultClass = "fragProcessRestart"
+	case "rebuild", "active_session":
+		if ar.ConfirmToken != "" {
+			vm.ResultClass = "fragConfirm"
+		} else if ar.ChargerReconfigureRequired {
+			vm.ResultClass = "fragRebuildOcpp"
+		} else {
+			vm.ResultClass = "fragRebuild"
+		}
+	case "none":
+		vm.ResultClass = "fragNone"
+	default:
+		vm.ResultClass = "fragHot"
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("HX-Retry", "false")
+	_ = s.template.ExecuteTemplate(w, vm.ResultClass+".html", vm)
+}
 func subtleValidate(a, b string) bool {
 	if len(a) == 0 || len(b) == 0 || len(a) != len(b) {
 		return false
