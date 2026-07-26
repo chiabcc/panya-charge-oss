@@ -238,3 +238,39 @@ func TestHasSensorDrift_False(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculator_SetLimits_RaceFree(t *testing.T) {
+	c := NewCalculator(6, 32, 230.0)
+	done := make(chan struct{})
+
+	sample := MeterSample{GridPowerW: -3000}
+
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			_ = c.Compute("CHG-001", sample)
+		}
+	}()
+
+	for i := 0; i < 200; i++ {
+		c.SetLimits(6+i%4, 32-i%4)
+	}
+
+	<-done
+}
+
+func TestCalculator_SetLimits_HotApplied(t *testing.T) {
+	c := NewCalculator(6, 32, 230.0)
+
+	r1 := c.Compute("CHG-001", MeterSample{GridPowerW: -10000})
+	if r1.LimitAmps != 32 {
+		t.Errorf("before: LimitAmps = %d, want 32", r1.LimitAmps)
+	}
+
+	c.SetLimits(6, 16)
+
+	r2 := c.Compute("CHG-002", MeterSample{GridPowerW: -10000})
+	if r2.LimitAmps != 16 {
+		t.Errorf("after: LimitAmps = %d, want 16", r2.LimitAmps)
+	}
+}

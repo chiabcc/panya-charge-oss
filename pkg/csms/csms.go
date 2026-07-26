@@ -6,6 +6,14 @@ package csms
 
 import "context"
 
+// ChargingParams holds hot-updateable charging configuration values.
+type ChargingParams struct {
+	MinAmps              int
+	MaxAmps              int
+	ContactorCooldownSec int
+	DefaultAmps          int
+}
+
 // Facade defines the contract that a cloud-wrapping GoCSMS must implement.
 // It exposes charger management, event subscription, and lifecycle control.
 type Facade interface {
@@ -26,4 +34,12 @@ type Facade interface {
 	// Chargers returns a point-in-time snapshot of all registered chargers.
 	// The returned slice is safe for concurrent read (defensive copy).
 	Chargers() []ChargerInfo
+
+	// UpdateCharging validates and applies charging parameters at runtime.
+	// Validates minAmps >= 6, maxAmps <= 32, minAmps <= maxAmps.
+	UpdateCharging(ChargingParams) error
+
+	// SetLogLevel adjusts the log level at runtime.
+	// Accepts: debug, info, warn, error (case-insensitive).
+	SetLogLevel(level string) error
 }

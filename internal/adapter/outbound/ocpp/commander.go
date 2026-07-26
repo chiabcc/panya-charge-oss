@@ -12,24 +12,32 @@ import (
 	"github.com/xBlaz3kx/ocpp-go/ocpp1.6/types"
 )
 
-const (
-	commandTimeout    = 15 * time.Second
-	contactorCooldown = 180 * time.Second
-)
+const commandTimeout = 15 * time.Second
+
+const defaultContactorCooldown = 180 * time.Second
 
 type Commander struct {
-	cs            ocpp16.CentralSystem
-	logger        *slog.Logger
-	mu            sync.Mutex
-	lastStartStop map[string]time.Time
+	cs              ocpp16.CentralSystem
+	logger          *slog.Logger
+	mu              sync.Mutex
+	contactorCooldown time.Duration
+	lastStartStop   map[string]time.Time
 }
 
 func NewCommander(cs ocpp16.CentralSystem, logger *slog.Logger) *Commander {
 	return &Commander{
-		cs:            cs,
-		logger:        logger,
-		lastStartStop: make(map[string]time.Time),
+		cs:                cs,
+		logger:            logger,
+		contactorCooldown: defaultContactorCooldown,
+		lastStartStop:     make(map[string]time.Time),
 	}
+}
+
+// SetCooldown updates the contactor protection cooldown duration.
+func (c *Commander) SetCooldown(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.contactorCooldown = d
 }
 
 func (c *Commander) enforceCooldown(chargerID string) error {
@@ -37,8 +45,8 @@ func (c *Commander) enforceCooldown(chargerID string) error {
 	defer c.mu.Unlock()
 
 	last, ok := c.lastStartStop[chargerID]
-	if ok && time.Since(last) < contactorCooldown {
-		remaining := contactorCooldown - time.Since(last)
+	if ok && time.Since(last) < c.contactorCooldown {
+		remaining := c.contactorCooldown - time.Since(last)
 		return fmt.Errorf("contactor protection: %s on cooldown for %s", chargerID, remaining.Round(time.Second))
 	}
 	return nil

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -71,6 +72,7 @@ type Handler struct {
 	broadcaster     LiveBroadcaster
 	ocppBroker      OcppMessageBroker
 	emitter         EventEmitter
+	ampMu           sync.RWMutex
 	minAmps         int
 	maxAmps         int
 	logger          *slog.Logger
@@ -113,6 +115,20 @@ func (h *Handler) SetLiveBroadcaster(b LiveBroadcaster) {
 
 func (h *Handler) SetOcppBroker(b OcppMessageBroker) {
 	h.ocppBroker = b
+}
+
+// SetMinMax updates the min/max amps bounds for discovery publishing.
+func (h *Handler) SetMinMax(minAmps, maxAmps int) {
+	h.ampMu.Lock()
+	defer h.ampMu.Unlock()
+	h.minAmps = minAmps
+	h.maxAmps = maxAmps
+}
+
+func (h *Handler) getAmpBounds() (min, max int) {
+	h.ampMu.RLock()
+	defer h.ampMu.RUnlock()
+	return h.minAmps, h.maxAmps
 }
 
 func (h *Handler) SetEmitter(e EventEmitter) {
@@ -182,7 +198,8 @@ func (h *Handler) OnBootNotification(chargePointId string, req *core.BootNotific
 
 	if h.discovery != nil {
 		proxyEnabled := h.isProxyEnabled(ctx, chargePointId)
-		h.discovery.PublishDiscovery(c, h.minAmps, h.maxAmps, proxyEnabled)
+		min, max := h.getAmpBounds()
+		h.discovery.PublishDiscovery(c, min, max, proxyEnabled)
 	}
 
 	h.recordInbound("BootNotification", start, nil)
@@ -514,7 +531,8 @@ func (h *Handler) OnConnect(chargePointID string) {
 	if h.discovery != nil {
 		if c, err := h.chargerRepo.GetCharger(ctx, chargePointID); err == nil && c != nil {
 			proxyEnabled := h.isProxyEnabled(ctx, chargePointID)
-			h.discovery.PublishDiscovery(*c, h.minAmps, h.maxAmps, proxyEnabled)
+			min, max := h.getAmpBounds()
+			h.discovery.PublishDiscovery(*c, min, max, proxyEnabled)
 		}
 	}
 
