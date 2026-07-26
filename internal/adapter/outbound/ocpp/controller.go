@@ -21,7 +21,7 @@ type Controller struct {
 	publisher      ports.EventPublisher
 	calc           *smartcharging.Calculator
 	pollInterval   time.Duration
-	safeAmps       int
+	safeAmps       atomic.Int32
 	staleTimeout   time.Duration
 	logger         *slog.Logger
 	lastSetAmps    sync.Map
@@ -48,10 +48,10 @@ func NewController(
 		publisher:    pub,
 		calc:         calc,
 		pollInterval: pollInterval,
-		safeAmps:     safeAmps,
 		staleTimeout: staleTimeout,
 		logger:       logger,
 	}
+	c.safeAmps.Store(int32(safeAmps))
 	c.enabled.Store(true)
 	return c
 }
@@ -73,6 +73,12 @@ func (c *Controller) IsEnabled() bool {
 
 func (c *Controller) SetEmitter(e EventEmitter) {
 	c.emitter = e
+}
+
+// SetSafeAmps updates the safe amps used as fallback when grid data is stale.
+func (c *Controller) SetSafeAmps(amps int) {
+	c.safeAmps.Store(int32(amps))
+	c.logger.Info("controller: safe amps updated", "safeAmps", amps)
 }
 
 func (c *Controller) emit(ev csms.Event) {
@@ -187,7 +193,7 @@ func (c *Controller) processConnector(ch charger.Charger, conn charger.Connector
 		c.lastShouldStop.Store(key, result.ShouldStop)
 		limitAmps := result.LimitAmps
 		if result.ShouldStop {
-			limitAmps = c.safeAmps
+			limitAmps = int(c.safeAmps.Load())
 		}
 		c.emit(csms.ChargingProfileUpdated{
 			Timestamp:  time.Now(),
@@ -202,12 +208,12 @@ func (c *Controller) processConnector(ch charger.Charger, conn charger.Connector
 		c.logger.Info("insufficient surplus — safe state",
 			"charger", ch.ID,
 			"connector", conn.ConnectorID,
-			"limit", c.safeAmps,
+			"limit", c.safeAmps.Load(),
 		)
-		if err := c.commander.SetChargingProfile(ch.ID, conn.ConnectorID, c.safeAmps); err != nil {
+		if err := c.commander.SetChargingProfile(ch.ID, conn.ConnectorID, int(c.safeAmps.Load())); err != nil {
 			c.logger.Error("failed to set safe profile", "err", err, "charger", ch.ID)
 		} else if c.publisher != nil {
-			c.publisher.PublishChargerCurrent(ch.ID, c.safeAmps)
+			c.publisher.PublishChargerCurrent(ch.ID, int(c.safeAmps.Load()))
 		}
 		return
 	}
@@ -274,11 +280,11 @@ func (c *Controller) revertAllToSafe(ctx context.Context) {
 			if conn.Status != "Charging" && conn.Status != "SuspendedEVSE" {
 				continue
 			}
-			if err := c.commander.SetChargingProfile(ch.ID, conn.ConnectorID, c.safeAmps); err != nil {
+			if err := c.commander.SetChargingProfile(ch.ID, conn.ConnectorID, int(c.safeAmps.Load())); err != nil {
 				c.logger.Error("failed to set safe profile (stale revert)",
 					"err", err, "charger", ch.ID, "connector", conn.ConnectorID)
 			} else if c.publisher != nil {
-				c.publisher.PublishChargerCurrent(ch.ID, c.safeAmps)
+				c.publisher.PublishChargerCurrent(ch.ID, int(c.safeAmps.Load()))
 			}
 		}
 	}

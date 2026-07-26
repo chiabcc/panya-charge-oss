@@ -34,6 +34,7 @@ type CSMS struct {
 
 	handler    *ocpp.Handler
 	controller *ocpp.Controller
+	calc       *smartcharging.Calculator
 	server     *ocpp.Server
 	commander  *ocpp.Commander
 	publisher  *outmqtt.Publisher
@@ -44,10 +45,14 @@ type CSMS struct {
 	wg       sync.WaitGroup
 	started  atomic.Bool
 	logger   *slog.Logger
+	levelVar *slog.LevelVar
 }
 
 func New(cfg config.Config) (*CSMS, error) {
-	logger := buildLogger(cfg.Server.LogLevel, cfg.Server.LogFormat)
+	levelVar := &slog.LevelVar{}
+	levelVar.Set(parseLogLevel(cfg.Server.LogLevel))
+
+	logger := buildLogger(levelVar, cfg.Server.LogFormat)
 
 	chargerRepo := ports.NewInMemoryChargerRepository()
 	sessionRepo := ports.NewInMemorySessionRepository()
@@ -143,12 +148,14 @@ func New(cfg config.Config) (*CSMS, error) {
 		proxyRepo:   proxyRepo,
 		handler:     handler,
 		controller:  controller,
+		calc:        calc,
 		server:      server,
 		commander:   commander,
 		publisher:   publisher,
 		subscriber:  subscriber,
 		energy:      energy,
 		logger:      logger,
+		levelVar:    levelVar,
 	}, nil
 }
 
@@ -260,6 +267,68 @@ func (c *CSMS) Chargers() []pkgcsms.ChargerInfo {
 	}
 
 	return result
+}
+
+// UpdateCharging validates and applies charging parameter changes at runtime.
+func (c *CSMS) UpdateCharging(params pkgcsms.ChargingParams) error {
+	if params.MinAmps >= 6 && params.MaxAmps <= 32 && params.MinAmps <= params.MaxAmps {
+		c.calc.SetLimits(params.MinAmps, params.MaxAmps)
+		c.controller.SetSafeAmps(params.DefaultAmps)
+		c.commander.SetCooldown(time.Duration(params.ContactorCooldownSec) * time.Second)
+		c.handler.SetMinMax(params.MinAmps, params.MaxAmps)
+		c.logger.Info("charging params updated",
+			"minAmps", params.MinAmps,
+			"maxAmps", params.MaxAmps,
+			"cooldownSec", params.ContactorCooldownSec,
+			"defaultAmps", params.DefaultAmps,
+		)
+		return nil
+	}
+	if params.MinAmps < 6 {
+		return fmt.Errorf("minAmps must be >= 6, got %d", params.MinAmps)
+	}
+	if params.MaxAmps > 32 {
+		return fmt.Errorf("maxAmps must be <= 32, got %d", params.MaxAmps)
+	}
+	return fmt.Errorf("minAmps (%d) > maxAmps (%d)", params.MinAmps, params.MaxAmps)
+}
+
+// HasActiveSession returns the IDs of chargers with an active transaction.
+func (c *CSMS) HasActiveSession() ([]string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	chargers, err := c.chargerRepo.ListChargers(ctx)
+	if err != nil {
+		return nil, false
+	}
+
+	var ids []string
+	for _, ch := range chargers {
+		conns, err := c.chargerRepo.ListConnectors(ctx, ch.ID)
+		if err != nil {
+			continue
+		}
+		for _, conn := range conns {
+			if active, _ := c.sessionRepo.GetActiveSession(ctx, ch.ID, conn.ConnectorID); active != nil {
+				ids = append(ids, ch.ID)
+				break
+			}
+		}
+	}
+	return ids, len(ids) > 0
+}
+
+// SetLogLevel adjusts the log level at runtime via LevelVar.
+func (c *CSMS) SetLogLevel(level string) error {
+	lv := parseLogLevel(level)
+	upper := strings.ToUpper(level)
+	if upper != "DEBUG" && upper != "INFO" && upper != "WARN" && upper != "ERROR" {
+		return fmt.Errorf("unknown log level %q (use debug, info, warn, or error)", level)
+	}
+	c.levelVar.Set(lv)
+	c.logger.Info("log level updated", "level", level)
+	return nil
 }
 
 type cmdBridge struct {
@@ -380,20 +449,8 @@ func (b *cmdBridge) stopCharging(ctx context.Context, chargerID string) {
 	}
 }
 
-func buildLogger(level, format string) *slog.Logger {
-	var sl slog.Level
-	switch strings.ToUpper(level) {
-	case "DEBUG":
-		sl = slog.LevelDebug
-	case "WARN":
-		sl = slog.LevelWarn
-	case "ERROR":
-		sl = slog.LevelError
-	default:
-		sl = slog.LevelInfo
-	}
-
-	opts := &slog.HandlerOptions{Level: sl}
+func buildLogger(level *slog.LevelVar, format string) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: level}
 	var h slog.Handler
 	if strings.ToLower(format) == "json" {
 		h = slog.NewJSONHandler(os.Stderr, opts)
@@ -401,4 +458,17 @@ func buildLogger(level, format string) *slog.Logger {
 		h = slog.NewTextHandler(os.Stderr, opts)
 	}
 	return slog.New(h)
+}
+
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToUpper(level) {
+	case "DEBUG":
+		return slog.LevelDebug
+	case "WARN":
+		return slog.LevelWarn
+	case "ERROR":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }

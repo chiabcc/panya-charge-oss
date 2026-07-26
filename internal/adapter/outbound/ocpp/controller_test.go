@@ -287,3 +287,31 @@ func TestController_SensorDriftDoesNotCrash(t *testing.T) {
 		t.Fatalf("SetChargingProfileCalls = %d, want 1 (drift warning should not block)", len(cmd.SetChargingProfileCalls))
 	}
 }
+
+func TestController_SetSafeAmps_RaceFree(t *testing.T) {
+	cmd := mocks.NewMockChargerCommander()
+	cr := mocks.NewMockChargerRepository()
+	cr.Chargers["CHG-001"] = charger.Charger{ID: "CHG-001", Online: true}
+	cr.Connectors["CHG-001"] = []charger.Connector{
+		{ChargerID: "CHG-001", ConnectorID: 1, Status: charger.StatusCharging},
+	}
+	grid := mocks.NewMockEnergySource()
+	grid.Stale = true
+	pub := mocks.NewMockEventPublisher()
+
+	ctrl := newTestController(t, cmd, cr, grid, pub)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for i := 0; i < 100; i++ {
+			ctrl.tick(context.Background())
+		}
+	}()
+
+	for i := 0; i < 100; i++ {
+		ctrl.SetSafeAmps(6 + i%7)
+	}
+
+	<-done
+}

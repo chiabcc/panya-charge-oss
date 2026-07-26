@@ -2,6 +2,7 @@ package smartcharging
 
 import (
 	"math"
+	"sync"
 )
 
 const crossValidationToleranceW = 500.0
@@ -12,6 +13,7 @@ const crossValidationToleranceW = 500.0
 // All logic is pure Go — no I/O, no side effects.
 // The OCPP adapter translates the output into SetChargingProfile calls.
 type Calculator struct {
+	mu         sync.RWMutex
 	minAmps    int
 	maxAmps    int
 	gridVolt   float64
@@ -27,6 +29,14 @@ func NewCalculator(minAmps, maxAmps int, gridVolt float64) *Calculator {
 		hysteresis: 2,
 		lastLimit:  make(map[string]int),
 	}
+}
+
+// SetLimits updates the min/max amp bounds used by Compute.
+func (c *Calculator) SetLimits(minAmps, maxAmps int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.minAmps = minAmps
+	c.maxAmps = maxAmps
 }
 
 // Compute determines the ideal charging profile from the latest meter data.
@@ -48,6 +58,9 @@ func (c *Calculator) Compute(chargerID string, sample MeterSample) ChargingProfi
 	}
 
 	idealAmps := int(math.Floor(availableW / c.gridVolt))
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if idealAmps < c.minAmps {
 		c.lastLimit[chargerID] = c.minAmps

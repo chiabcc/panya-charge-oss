@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Panya Charge — Login</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <div class="login">
+        <form id="login-form" hx-post="/login" hx-swap="outerHTML" hx-target="#login-form" class="login-card">
+            <div class="login-title">Panya Charge</div>
+            {{ if .Error }}<div class="frag frag-error">{{ .Error }}</div>{{ end }}
+            <div class="login-field">
+                <label class="login-label" for="token">Token</label>
+                <input type="password" id="token" name="token" required autofocus autocomplete="current-password" placeholder="Enter access token">
+            </div>
+            <button type="submit" class="btn-primary login-submit">Sign in</button>
+        </form>
+    </div>
+</body>
+</html>

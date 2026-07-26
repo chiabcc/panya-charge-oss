@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ type Config struct {
 	Server   ServerConfig `yaml:"server"`
 	MQTT     MQTTConfig   `yaml:"mqtt"`
 	Charging ChargingConfig `yaml:"charging"`
+	WebUI    WebUIConfig  `yaml:"webui"`
 }
 
 type ServerConfig struct {
@@ -23,6 +25,14 @@ type ServerConfig struct {
 	LogLevel  string `yaml:"log_level"`
 	LogFormat string `yaml:"log_format"`
 }
+
+type WebUIConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Listen  string `yaml:"listen"`
+	Token   string `yaml:"token"`
+}
+
+
 
 type MQTTConfig struct {
 	Broker                 string            `yaml:"broker"`
@@ -94,6 +104,11 @@ func defaultConfig() *Config {
 			"smart_charging_command":  "smart_charging/command",
 		},
 		},
+		WebUI: WebUIConfig{
+			Enabled: false,
+			Listen:  "127.0.0.1:8888",
+			Token:   "",
+		},
 		Charging: ChargingConfig{
 			MinAmps:              6,
 			MaxAmps:              32,
@@ -105,13 +120,15 @@ func defaultConfig() *Config {
 
 func applyEnvOverrides(cfg *Config) {
 	strOverrides := map[string]*string{
-		"PANYA_MQTT_BROKER":       &cfg.MQTT.Broker,
-		"PANYA_MQTT_CLIENT_ID":    &cfg.MQTT.ClientID,
-		"PANYA_MQTT_USERNAME":     &cfg.MQTT.Username,
-		"PANYA_MQTT_PASSWORD":     &cfg.MQTT.Password,
-		"PANYA_MQTT_BASE_TOPIC":   &cfg.MQTT.BaseTopic,
-		"PANYA_SERVER_LOG_LEVEL":  &cfg.Server.LogLevel,
-		"PANYA_SERVER_LOG_FORMAT": &cfg.Server.LogFormat,
+		"PANYA_MQTT_BROKER":           &cfg.MQTT.Broker,
+		"PANYA_MQTT_CLIENT_ID":        &cfg.MQTT.ClientID,
+		"PANYA_MQTT_USERNAME":         &cfg.MQTT.Username,
+		"PANYA_MQTT_PASSWORD":         &cfg.MQTT.Password,
+		"PANYA_MQTT_BASE_TOPIC":       &cfg.MQTT.BaseTopic,
+		"PANYA_SERVER_LOG_LEVEL":      &cfg.Server.LogLevel,
+		"PANYA_SERVER_LOG_FORMAT":     &cfg.Server.LogFormat,
+		"PANYA_WEBUI_LISTEN":          &cfg.WebUI.Listen,
+		"PANYA_WEBUI_TOKEN":           &cfg.WebUI.Token,
 	}
 	for env, ptr := range strOverrides {
 		if val := os.Getenv(env); val != "" {
@@ -126,6 +143,17 @@ func applyEnvOverrides(cfg *Config) {
 		if val := os.Getenv(env); val != "" {
 			if n, err := strconv.Atoi(val); err == nil {
 				*ptr = n
+			}
+		}
+	}
+
+	boolOverrides := map[string]*bool{
+		"PANYA_WEBUI_ENABLED": &cfg.WebUI.Enabled,
+	}
+	for env, ptr := range boolOverrides {
+		if val := os.Getenv(env); val != "" {
+			if b, err := strconv.ParseBool(val); err == nil {
+				*ptr = b
 			}
 		}
 	}
@@ -148,10 +176,39 @@ func (c *Config) validate() error {
 		return fmt.Errorf("charging.min_amps (%d) > charging.max_amps (%d)",
 			c.Charging.MinAmps, c.Charging.MaxAmps)
 	}
+	if c.WebUI.Enabled {
+		if c.WebUI.Listen == "" {
+			return fmt.Errorf("server.webui listen address required, got empty")
+		}
+		if !isLoopback(c.WebUI.Listen) && c.WebUI.Token == "" {
+			return fmt.Errorf("server.webui requires a token when binding to non-loopback address %q", c.WebUI.Listen)
+		}
+	}
 	return nil
+}
+
+func isLoopback(addr string) bool {
+	if addr == "localhost" || addr == "localhost:8888" || addr == "127.0.0.1" || addr == "127.0.0.1:8888" || addr == "::1" || addr == "::1:8888" {
+		return true
+	}
+	if addr == "" {
+		return false
+	}
+	host, _, _ := net.SplitHostPort(addr)
+	if host == "" {
+		return false
+	}
+	return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "[::")
 }
 
 // LogLevelUpper returns the log level in uppercase for slog.
 func (c *Config) LogLevelUpper() string {
 	return strings.ToUpper(c.Server.LogLevel)
+}
+
+// Validate checks the config for correctness. Exported for use by the
+// WebUI save handler which builds a candidate config to validate before
+// persisting.
+func Validate(cfg *Config) error {
+	return cfg.validate()
 }

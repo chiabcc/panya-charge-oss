@@ -1,0 +1,70 @@
+{{ define "config.html" }}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Panya Charge — Config</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <h1>Panya Charge</h1>
+                <div class="subtitle">OCPP 1.6-J → MQTT bridge</div>
+            </div>
+            <form method="post" action="/logout" style="display:inline"><button type="submit" class="logout-link">Sign out</button></form>
+        </div>
+        {{ template "configForm.html" . }}
+    </div>
+</body>
+</html>
+{{ end }}
+
+{{ define "configForm.html" }}
+<form id="config-form" hx-post="/api/config" hx-target="#result" hx-indicator="#config-form">
+        {{ template "section.html" (index .Sections "server") }}
+        {{ template "section.html" (index .Sections "mqtt") }}
+        {{ template "section.html" (index .Sections "charging") }}
+        {{ template "section.html" (index .Sections "webui") }}
+        <div class="save-bar">
+            <div class="save-actions">
+                <button type="submit" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </form>
+    <div id="result">{{ if .Result }}{{ .Result }}{{ end }}</div>
+{{ end }}
+
+{{ define "section.html" }}
+<div class="section">
+    <div class="section-name">{{ .Title }}</div>
+    {{ range $f := .Fields }}
+        {{ template "field.html" (dict "name" $f.Name "value" $f.Value "disabled" $f.Disabled "secret" $f.Secret "applyClass" $f.ApplyClass "passwordSet" $f.PasswordSet "tokenSet" $f.TokenSet) }}
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "field.html" }}
+<div class="section-row">
+    <label class="section-label" for="f-{{ .name }}">{{ .name }}</label>
+    <div class="section-input">
+        {{ if .secret }}
+            <input type="password" id="f-{{ .name }}" name="{{ .name }}" value="" placeholder="••••••  (set — enter to change)"{{ if .disabled }} disabled{{ end }}>
+        {{ else }}
+            <input type="text" id="f-{{ .name }}" name="{{ .name }}" value="{{ .value }}"{{ if .disabled }} disabled{{ end }}>
+        {{ end }}
+    </div>
+    <div class="section-badges">
+        {{ if .disabled }}<span class="b b-env">ENV</span>{{ end }}
+        {{ if eq .applyClass "hot" }}<span class="b b-hot">instant</span>{{ end }}
+        {{ if eq .applyClass "rebuild" }}<span class="b b-rebuild">disconnect</span>{{ end }}
+        {{ if eq .applyClass "process_restart" }}<span class="b b-restart">restart</span>{{ end }}
+    </div>
+</div>
+{{ if .secret }}
+<div class="helper">leave blank to keep current</div>
+{{ end }}
+{{ end }}

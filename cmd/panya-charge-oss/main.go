@@ -2,16 +2,16 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/chiabcc/panya-charge-oss/internal/adapter/inbound/webui"
 	"github.com/chiabcc/panya-charge-oss/internal/config"
-	"github.com/chiabcc/panya-charge-oss/pkg/csmsfactory"
 )
 
 func main() {
@@ -47,29 +47,7 @@ func run(configPath string) error {
 	}
 	slog.SetDefault(slog.New(handler))
 
-	facade, err := csmsfactory.New(csmsfactory.Config{
-		Server: csmsfactory.ServerConfig{
-			OCPPPort:  cfg.Server.OCPPPort,
-			OCPPPath:  cfg.Server.OCPPPath,
-			LogLevel:  cfg.Server.LogLevel,
-			LogFormat: cfg.Server.LogFormat,
-		},
-		MQTT: csmsfactory.MQTTConfig{
-			Broker:                 cfg.MQTT.Broker,
-			ClientID:               cfg.MQTT.ClientID,
-			Username:               cfg.MQTT.Username,
-			Password:               cfg.MQTT.Password,
-			BaseTopic:              cfg.MQTT.BaseTopic,
-			Topics:                 cfg.MQTT.Topics,
-			DisconnectThresholdSec: cfg.MQTT.DisconnectThresholdSec,
-		},
-		Charging: csmsfactory.ChargingConfig{
-			MinAmps:              cfg.Charging.MinAmps,
-			MaxAmps:              cfg.Charging.MaxAmps,
-			ContactorCooldownSec: cfg.Charging.ContactorCooldownSec,
-			DefaultAmps:          cfg.Charging.DefaultAmps,
-		},
-	})
+	facade, err := buildFacade(cfg)
 	if err != nil {
 		return fmt.Errorf("init csms: %w", err)
 	}
@@ -84,12 +62,30 @@ func run(configPath string) error {
 		"base_topic", cfg.MQTT.BaseTopic,
 	)
 
-	err = facade.Start(ctx)
-	if err != nil && !errors.Is(err, context.Canceled) {
-		return err
+	applier := newWebUIApplier(facade, ctx)
+
+	if cfg.WebUI.Enabled {
+		isLoopback := isLoopback(cfg.WebUI.Listen)
+		srv := webui.NewServer(configPath, cfg.WebUI.Listen, cfg.WebUI.Token, isLoopback, applier)
+		go func() {
+			if err := srv.Start(ctx); err != nil {
+				slog.Warn("webui start failed", "error", err)
+			}
+		}()
 	}
 
-	facade.Stop()
+	go runFacade(facade, ctx)
+
+	<-ctx.Done()
+	applier.Shutdown()
 	slog.Info("shutdown complete")
 	return nil
+}
+
+func isLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr == "localhost" || addr == "::1"
+	}
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
 }
