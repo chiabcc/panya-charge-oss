@@ -4,7 +4,7 @@
 
 `panya-charge-oss` is an open-source OCPP 1.6-J protocol bridge that connects EV chargers to Home Assistant via MQTT. It implements a CSMS (Central System Management System) that speaks OCPP 1.6-J over WebSocket to chargers, and publishes charger telemetry to MQTT topics that Home Assistant discovers automatically.
 
-This is the **OSS core** — a pure protocol bridge with no database, no web UI, and no authentication. The commercial `panya-charge` project builds on this core with multi-tenant PostgreSQL, a web dashboard, auth, and AI optimization.
+This is the **OSS core** — a pure protocol bridge with no database and no authentication; ships an optional embedded config WebUI (disabled by default — see CONTEXT.md). The commercial `panya-charge` project builds on this core with multi-tenant PostgreSQL, a web dashboard, auth, and AI optimization.
 
 ## Tech Stack
 
@@ -31,6 +31,7 @@ internal/
   adapter/
     inbound/
       mqtt/           # MQTT subscriber (commands from HA)
+      webui/          # config WebUI server
     outbound/
       ocpp/           # OCPP WebSocket server + handlers
       mqtt/           # MQTT publisher (telemetry + HA discovery)
@@ -54,6 +55,7 @@ go vet ./...            # Static analysis
 3. **Contactor protection: minimum 180s between start/stop commands** — the smart charging controller enforces this cooldown to prevent physical contactor damage.
 4. **MQTT disconnect > 60s → revert to safe state (6A minimum)** — when grid power data is stale, the controller falls back to the minimum current.
 5. **`SetChargingProfile` is local-only — NEVER forwarded upstream** — charging profiles are managed by this CSMS only, never relayed to vendor clouds.
+6. **WebUI binds loopback by default; non-loopback bind REQUIRES webui.token; mqtt.password must never appear in any HTTP response.**
 
 ## Hardware Target
 
