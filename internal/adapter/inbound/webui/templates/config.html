@@ -5,48 +5,20 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Panya Charge — Config</title>
+    <link rel="stylesheet" href="/static/app.css">
     <script src="/static/htmx.min.js"></script>
-    <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:system-ui,-apple-system,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:1.5rem}
-        h1{font-size:1.2rem;margin-bottom:1rem;text-align:center}
-        h2{font-size:.95rem;color:#888;margin:1.5rem 0 .5rem;padding-bottom:.25rem;border-bottom:1px solid #333}
-        fieldset{background:#16213e;border:1px solid #0f3460;border-radius:6px;padding:1rem;margin-bottom:1rem}
-        .row{display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.6rem;padding:.4rem 0}
-        .row+.row{border-top:1px solid #0f346055}
-        label{flex:0 0 180px;font-size:.8rem;padding-top:.3rem;color:#ccc}
-        input{flex:1;padding:.4rem .5rem;border:1px solid #333;border-radius:4px;background:#0f3460;color:#eee;font-size:.8rem}
-        input:disabled{background:#111833;color:#666;border-color:#222}
-        input[type=password]{font-family:monospace}
-        .badges{flex:0 0 auto;display:flex;flex-direction:column;gap:2px;min-width:140px}
-        .badge{font-size:.65rem;padding:2px 6px;border-radius:3px;white-space:nowrap}
-        .badge-env{background:#333;color:#f0ad4e}
-        .badge-hot{background:#1a3a2a;color:#5cb85c}
-        .badge-rebuild{background:#3a2a1a;color:#f0ad4e}
-        .badge-restart{background:#2a2a2a;color:#888}
-        .helper{font-size:.7rem;color:#666;margin-top:2px}
-        .actions{text-align:center;margin:1rem 0}
-        button{padding:.5rem 2rem;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.9rem}
-        button:hover{background:#1a1a4e}
-        #result{margin-top:1rem}
-        .frag-success{background:#1a3a2a;padding:.75rem 1rem;border-radius:6px;color:#5cb85c}
-        .frag-error{background:#3a1a1a;padding:.75rem 1rem;border-radius:6px;color:#d9534f}
-        .frag-restart{background:#2a2a2a;padding:.75rem 1rem;border-radius:6px;color:#888}
-        .frag-rebuild{background:#3a2a1a;padding:.75rem 1rem;border-radius:6px;color:#f0ad4e}
-        .frag-confirm{background:#16213e;border:1px solid #0f3460;padding:1rem;border-radius:6px}
-        .frag-confirm .warn{color:#d9534f;font-size:.8rem;margin-bottom:.5rem}
-        .frag-confirm .fields{font-size:.8rem;color:#aaa;margin-bottom:.75rem}
-        .frag-confirm .fields span{background:#0f3460;padding:2px 6px;border-radius:3px;margin-right:4px}
-        .frag-confirm button{background:#d9534f;margin-right:.5rem}
-        .frag-confirm button.cancel{background:#333}
-        .frag-ocpp{background:#3a1a1a;border:1px solid #8b0000;padding:1rem;border-radius:6px;color:#f0ad4e}
-        .frag-ocpp .warn{color:#d9534f;font-weight:bold;margin-bottom:.5rem}
-        a{color:#5cb85c}
-    </style>
 </head>
 <body>
-    <h1>Panya Charge</h1>
-    {{ template "configForm.html" . }}
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <h1>Panya Charge</h1>
+                <div class="subtitle">OCPP 1.6-J → MQTT bridge</div>
+            </div>
+            <form method="post" action="/logout" style="display:inline"><button type="submit" class="logout-link">Sign out</button></form>
+        </div>
+        {{ template "configForm.html" . }}
+    </div>
 </body>
 </html>
 {{ end }}
@@ -57,38 +29,42 @@
         {{ template "section.html" (index .Sections "mqtt") }}
         {{ template "section.html" (index .Sections "charging") }}
         {{ template "section.html" (index .Sections "webui") }}
-        <div class="actions">
-            <button type="submit">Save</button>
+        <div class="save-bar">
+            <div class="save-actions">
+                <button type="submit" class="btn-primary">Save</button>
+            </div>
         </div>
     </form>
     <div id="result">{{ if .Result }}{{ .Result }}{{ end }}</div>
 {{ end }}
 
 {{ define "section.html" }}
-<h2>{{ .Title }}</h2>
-<fieldset>
+<div class="section">
+    <div class="section-name">{{ .Title }}</div>
     {{ range $f := .Fields }}
         {{ template "field.html" (dict "name" $f.Name "value" $f.Value "disabled" $f.Disabled "secret" $f.Secret "applyClass" $f.ApplyClass "passwordSet" $f.PasswordSet "tokenSet" $f.TokenSet) }}
     {{ end }}
-</fieldset>
+</div>
 {{ end }}
 
 {{ define "field.html" }}
-<div class="row">
-    <label for="f-{{ .name }}">{{ .name }}</label>
-    {{ if .secret }}
-        <input type="password" id="f-{{ .name }}" name="{{ .name }}" value="" placeholder="••••••  (set — enter to change)"{{ if .disabled }} disabled{{ end }}>
-    {{ else }}
-        <input type="text" id="f-{{ .name }}" name="{{ .name }}" value="{{ .value }}"{{ if .disabled }} disabled{{ end }}>
-    {{ end }}
-    <div class="badges">
-        {{ if .disabled }}<span class="badge badge-env">set by ENV</span>{{ end }}
-        {{ if eq .applyClass "hot" }}<span class="badge badge-hot">applies instantly</span>{{ end }}
-        {{ if eq .applyClass "rebuild" }}<span class="badge badge-rebuild">brief charger disconnect</span>{{ end }}
-        {{ if eq .applyClass "process_restart" }}<span class="badge badge-restart">applies on next restart</span>{{ end }}
+<div class="section-row">
+    <label class="section-label" for="f-{{ .name }}">{{ .name }}</label>
+    <div class="section-input">
+        {{ if .secret }}
+            <input type="password" id="f-{{ .name }}" name="{{ .name }}" value="" placeholder="••••••  (set — enter to change)"{{ if .disabled }} disabled{{ end }}>
+        {{ else }}
+            <input type="text" id="f-{{ .name }}" name="{{ .name }}" value="{{ .value }}"{{ if .disabled }} disabled{{ end }}>
+        {{ end }}
+    </div>
+    <div class="section-badges">
+        {{ if .disabled }}<span class="b b-env">ENV</span>{{ end }}
+        {{ if eq .applyClass "hot" }}<span class="b b-hot">instant</span>{{ end }}
+        {{ if eq .applyClass "rebuild" }}<span class="b b-rebuild">disconnect</span>{{ end }}
+        {{ if eq .applyClass "process_restart" }}<span class="b b-restart">restart</span>{{ end }}
     </div>
 </div>
 {{ if .secret }}
-<div class="row"><label></label><div class="helper">leave blank to keep current</div></div>
+<div class="helper">leave blank to keep current</div>
 {{ end }}
 {{ end }}

@@ -1,22 +1,22 @@
 {{/* Hot reload success */}}
 {{define "fragHot.html"}}
-<div class="frag-success">Config applied instantly.</div>
+<div class="frag frag-success">Config applied instantly.</div>
 {{end}}
 
 {{/* Process restart — changes saved to disk, restart needed */}}
 {{define "fragProcessRestart.html"}}
-<div class="frag-restart">Saved — restart required. Changes will apply on next process restart.</div>
+<div class="frag frag-restart">Saved — restart required. Changes will apply on next process restart.</div>
 {{end}}
 
 {{/* Rebuild completed — charger will reconnect */}}
 {{define "fragRebuild.html"}}
-<div class="frag-rebuild" hx-get="/api/config" hx-trigger="load delay:3s" hx-swap="outerHTML" hx-target="#config-form">Rebuilding, charger will reconnect…</div>
+<div class="frag frag-rebuild" hx-get="/api/config" hx-trigger="load delay:3s" hx-swap="outerHTML" hx-target="#config-form">Rebuilding, charger will reconnect…</div>
 {{end}}
 
 {{/* Rebuild required — ocpp_path changed, charger must be reconfigured */}}
 {{define "fragRebuildOcpp.html"}}
-<div class="frag-ocpp">
-    <div class="warn">⚠ Your charger's connection URL will change permanently.</div>
+<div class="frag frag-ocpp">
+    <div class="warn">&#9888; Your charger's connection URL will change permanently.</div>
     <p>You must update the charger firmware settings to the new URL to reconnect.</p>
     <p>After updating the charger, click confirm below to restart the OCPP connection.</p>
     <button type="button" hx-post="/api/config" hx-target="#result" hx-vals='{"confirm_token":"{{ .ConfirmToken }}"}'>Confirm Rebuild</button>
@@ -25,9 +25,9 @@
 
 {{/* Confirm required — active session present */}}
 {{define "fragConfirm.html"}}
-<div class="frag-confirm">
+<div class="frag frag-confirm">
     {{ if .ActiveSession }}
-    <div class="warn">⚠ A vehicle may be charging — charger will disconnect ~5s to reconfigure.</div>
+    <div class="warn">&#9888; A vehicle may be charging — charger will disconnect ~5s to reconfigure.</div>
     {{ end }}
     <div class="fields">
         <strong>Fields to rebuild:</strong>
@@ -41,10 +41,10 @@
 
 {{/* Validation error */}}
 {{define "fragError.html"}}
-<div class="frag-error">{{ .Message }}</div>
+<div class="frag frag-error">{{ .Message }}</div>
 {{end}}
 
 {{/* No changes */}}
 {{define "fragNone.html"}}
-<div class="frag-restart">No changes detected.</div>
+<div class="frag frag-restart">No changes detected.</div>
 {{end}}
