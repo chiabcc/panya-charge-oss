@@ -513,7 +513,7 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rebuild: check active session before saving
-	if s.applier != nil {
+	if report.Class == config.ApplyRebuild && s.applier != nil {
 		chargerIDs, hasActive := s.applier.HasActiveSession()
 
 		if hasActive {
