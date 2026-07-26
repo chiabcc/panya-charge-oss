@@ -21,9 +21,45 @@ Open-source OCPP 1.6-J protocol bridge for EV chargers. Connects any OCPP 1.6-J 
 
 ## Architecture
 
-Pure protocol bridge: OCPP ↔ MQTT ↔ Home Assistant. No database, no auth — optional embedded config WebUI (disabled by default).
+Pure protocol bridge: OCPP ↔ MQTT ↔ Home Assistant. No database, no auth —
+optional embedded config WebUI (disabled by default).
+
+Two deployment modes:
+
+- **Home Assistant Add-on** — one-click install from the HA Add-on Store. The
+  add-on configures MQTT credentials automatically from HA's Services API.
+- **Standalone** — run as a Go binary or Docker container on any host. Full
+  control over all configuration options.
 
 ## Quick Start
+
+### Home Assistant Add-on (Recommended)
+
+The fastest path is the **Panya Charge OSS** add-on. Install from the Home
+Assistant Add-on Store in one click — no building, no Docker, no config
+files.
+
+1. Go to **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
+2. Add: `https://github.com/chiabcc/panya-charge-oss`
+3. Click **Panya Charge OSS** → **Install**
+4. Configure MQTT topics and charging parameters in the add-on UI
+5. Set your charger's OCPP URL to `ws://<HA-IP>:8887/{ws}`
+
+See **[Install as a Home Assistant Add-on](docs/add-on-install.md)** for
+full details, configuration reference, and troubleshooting.
+
+### Alternative: Standalone Docker
+
+Build and run the CSMS directly (standalone or inside Docker):
+
+```bash
+docker build -t panya-charge-oss .
+docker run -p 8887:8887 -p 8888:8888 \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  panya-charge-oss
+```
+
+Or run from source:
 
 ```bash
 git clone https://github.com/chiabcc/panya-charge-oss.git
@@ -46,6 +82,8 @@ server:
 mqtt:
   broker: tcp://localhost:1883
   base_topic: panya
+  topics:
+    grid_power: "grid/power"
 charging:
   min_amps: 6
   max_amps: 32
@@ -76,11 +114,17 @@ webui:
 
 Access at the configured address. For LAN access, a token is required.
 
+> **Note:** The Config WebUI is **not available** in Home Assistant Add-on mode.
+> Use the add-on's built-in Configuration tab instead, which is also available
+> through HA's web UI.
+
 See the **[Config WebUI guide](docs/webui.md)** for API access, security
 details, and how field changes apply.
 
 For library usage (embed the CSMS in your application), see
 [docs/development.md](docs/development.md).
+
+**Running on Home Assistant?** Install the [Panya Charge OSS Add-on](docs/add-on-install.md) — one-click install from the HA Add-on Store.
 
 **Integrating with Home Assistant?** See the
 [Home Assistant Integration Guide](docs/home-assistant.md).
