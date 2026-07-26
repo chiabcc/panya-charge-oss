@@ -77,9 +77,9 @@
 <div class="row">
     <label for="f-{{ .name }}">{{ .name }}</label>
     {{ if .secret }}
-        <input type="password" id="f-{{ .name }}" name="{{ .name }}" value="" placeholder="••••••  (set — enter to change)" disabled="{{ .disabled }}">
+        <input type="password" id="f-{{ .name }}" name="{{ .name }}" value="" placeholder="••••••  (set — enter to change)"{{ if .disabled }} disabled{{ end }}>
     {{ else }}
-        <input type="text" id="f-{{ .name }}" name="{{ .name }}" value="{{ .value }}" disabled="{{ .disabled }}">
+        <input type="text" id="f-{{ .name }}" name="{{ .name }}" value="{{ .value }}"{{ if .disabled }} disabled{{ end }}>
     {{ end }}
     <div class="badges">
         {{ if .disabled }}<span class="badge badge-env">set by ENV</span>{{ end }}

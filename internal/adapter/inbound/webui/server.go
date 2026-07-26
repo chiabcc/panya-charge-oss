@@ -294,26 +294,27 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	accept := r.Header.Get("Accept")
-	if strings.Contains(accept, "application/json") {
-		dto := buildConfigDTO(ec)
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(dto); err != nil {
-			slog.Error("encode config DTO", "error", err)
-		}
-		return
-	}
-
-	vm := buildConfigFormVM(ec)
+	// HTMX partials first, then browser HTML, then API JSON
 	if isHtmxRequest(r) {
+		vm := buildConfigFormVM(ec)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := s.template.ExecuteTemplate(w, "fragments.html", vm); err != nil {
 			slog.Error("render config fragment template", "error", err)
 		}
 		return
 	}
-	// Default: serve JSON for API/programmatic requests (tests, CLI, etc.)
-	w.Header().Set("Content-Type", "application/json")
+
+	if strings.Contains(accept, "text/html") {
+		vm := buildConfigFormVM(ec)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.template.ExecuteTemplate(w, "config.html", vm); err != nil {
+			slog.Error("render config.html template", "error", err)
+		}
+		return
+	}
+
 	dto := buildConfigDTO(ec)
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(dto); err != nil {
 		slog.Error("encode config DTO", "error", err)
 	}
