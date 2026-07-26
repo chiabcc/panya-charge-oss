@@ -773,7 +773,7 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 	json.NewEncoder(w).Encode(applyResult{Error: msg, ErrorMessage: msg})
 }
 
-func writeJSON(w http.ResponseWriter, r interface{}) {
+func writeJSON(w http.ResponseWriter, r any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(r)
 }
