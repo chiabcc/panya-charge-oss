@@ -48,12 +48,10 @@ type applyResult struct {
 
 // confirmEntry holds a single-use confirm token and the pending candidate.
 type confirmEntry struct {
-	nonce      string
-	fields     []string
-	expires    time.Time
-	used       bool
-	candidate  *config.Config
-	reason     string // hot, rebuild, process_restart
+	nonce     string
+	fields    []string
+	expires   time.Time
+	candidate *config.Config
 }
 
 func newConfirmToken() string {
@@ -171,7 +169,6 @@ type Server struct {
 	token      string
 	isLoopback bool
 	template   *template.Template
-	logger     *slog.Logger
 	applier    Applier
 	mu         sync.Mutex
 	confirm    *confirmEntry
@@ -193,7 +190,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	data := loginData{}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	s.template.ExecuteTemplate(w, "login.html", data)
+	if err := s.template.ExecuteTemplate(w, "login.html", data); err != nil {
+		slog.Error("execute login template", "error", err)
+	}
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +202,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !subtleValidate(submitted, s.token) {
 		data := loginData{Error: "Invalid token"}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		s.template.ExecuteTemplate(w, "login.html", data)
+		if err := s.template.ExecuteTemplate(w, "login.html", data); err != nil {
+			slog.Error("execute login template", "error", err)
+		}
 		return
 	}
 
@@ -757,20 +758,12 @@ func applyFormValues(cfg *config.Config, form map[string][]string, current *conf
 	}
 }
 
-func wasPasswordChanged(form map[string][]string) bool {
-	vals := form["mqtt.password"]
-	return len(vals) > 0 && vals[0] != ""
-}
-
-func wasTokenChanged(form map[string][]string) bool {
-	vals := form["webui.token"]
-	return len(vals) > 0 && vals[0] != ""
-}
-
 func jsonError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(applyResult{Error: msg, ErrorMessage: msg})
+	if err := json.NewEncoder(w).Encode(applyResult{Error: msg, ErrorMessage: msg}); err != nil {
+		slog.Error("encode json error response", "error", err)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, r any) {
@@ -785,7 +778,7 @@ func isHtmxRequest(r *http.Request) bool {
 func renderHTMLError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
-	_, _ = w.Write([]byte(fmt.Sprintf(`<div class="frag-error">%s</div>`, template.HTMLEscapeString(msg))))
+	_, _ = fmt.Fprintf(w, `<div class="frag-error">%s</div>`, template.HTMLEscapeString(msg))
 }
 
 func (s *Server) renderResult(w http.ResponseWriter, r *http.Request, ar *applyResult) {
@@ -848,10 +841,8 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	go func() {
-		select {
-		case <-ctx.Done():
-			httpSrv.Shutdown(context.Background())
-		}
+		<-ctx.Done()
+		_ = httpSrv.Shutdown(context.Background())
 	}()
 
 	if err := httpSrv.Serve(ln); err != http.ErrServerClosed {

@@ -206,7 +206,7 @@ func TestEffective_EmptyPath(t *testing.T) {
 	if ec.ServerOCPPPort != 8887 {
 		t.Errorf("ServerOCPPPort = %d, want 8887 (default)", ec.ServerOCPPPort)
 	}
-	if ec.OverriddenByEnv != nil && len(ec.OverriddenByEnv) > 0 {
+	if len(ec.OverriddenByEnv) > 0 {
 		t.Errorf("expected no overrides, got %v", ec.OverriddenByEnv)
 	}
 }

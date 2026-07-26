@@ -3,13 +3,11 @@ package webui
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -384,7 +382,7 @@ func TestHandleGetConfigFresh(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 
 	// Write initial config
-	initial := fmt.Sprintf(`server:
+	initial := `server:
   ocpp_port: 8887
   ocpp_path: "/{ws}"
   log_level: info
@@ -402,7 +400,7 @@ webui:
   enabled: true
   listen: "127.0.0.1:8888"
   token: "tok"
-`)
+`
 	if err := os.WriteFile(cfgPath, []byte(initial), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +421,7 @@ webui:
 	}
 
 	// Edit on disk
-	edited := fmt.Sprintf(`server:
+	edited := `server:
   ocpp_port: 8887
   ocpp_path: "/{ws}"
   log_level: info
@@ -441,7 +439,7 @@ webui:
   enabled: true
   listen: "127.0.0.1:8888"
   token: "tok"
-`)
+`
 	if err := os.WriteFile(cfgPath, []byte(edited), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -550,9 +548,7 @@ webui:
 		t.Fatal(err)
 	}
 
-	prev := os.Getenv("PANYA_MQTT_BROKER")
-	t.Cleanup(func() { os.Setenv("PANYA_MQTT_BROKER", prev) })
-	os.Setenv("PANYA_MQTT_BROKER", "tcp://env-broker:1883")
+	t.Setenv("PANYA_MQTT_BROKER", "tcp://env-broker:1883")
 
 	srv := NewServer(cfgPath, ":0", "tok", true, nil)
 
@@ -686,45 +682,6 @@ func contains(s []string, v string) bool {
 	return false
 }
 
-func buildFullForm(cfgPath string, overrides map[string]string) (string, error) {
-	ec, err := config.Effective(cfgPath)
-	if err != nil {
-		return "", err
-	}
-
-	pairs := []string{
-		formField("server.ocpp_port", fmt.Sprintf("%d", ec.ServerOCPPPort)),
-		formField("server.ocpp_path", ec.ServerOCPPPath),
-		formField("server.log_level", ec.ServerLogLevel),
-		formField("server.log_format", ec.ServerLogFormat),
-		formField("mqtt.broker", ec.MQTTBroker),
-		formField("mqtt.client_id", ec.MQTTClientID),
-		formField("mqtt.base_topic", ec.MQTTBaseTopic),
-		formField("mqtt.disconnect_threshold_sec", fmt.Sprintf("%d", ec.MQTTDisconnectSec)),
-		formField("charging.min_amps", fmt.Sprintf("%d", ec.ChargingMinAmps)),
-		formField("charging.max_amps", fmt.Sprintf("%d", ec.ChargingMaxAmps)),
-		formField("charging.contactor_cooldown_sec", fmt.Sprintf("%d", ec.ChargingContactorsSec)),
-		formField("charging.default_amps", fmt.Sprintf("%d", ec.ChargingDefaultAmps)),
-		formField("webui.enabled", fmt.Sprintf("%v", ec.WebUIEnabled)),
-		formField("webui.listen", ec.WebUIListen),
-	}
-
-	for k, v := range overrides {
-		for i, p := range pairs {
-			if strings.HasPrefix(p, k+"=") {
-				pairs[i] = formField(k, v)
-				break
-			}
-		}
-	}
-
-	return strings.Join(pairs, "&"), nil
-}
-
-func formField(key, value string) string {
-	return key + "=" + value
-}
-
 func TestStaticAssetsServed(t *testing.T) {
 	t.Parallel()
 
@@ -750,7 +707,6 @@ func TestStaticAssetsServed(t *testing.T) {
 }
 
 func TestEnvOverrideFlags(t *testing.T) {
-	t.Parallel()
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -780,9 +736,7 @@ webui:
 	}
 
 	// Set env override
-	prev := os.Getenv("PANYA_MQTT_BROKER")
-	t.Cleanup(func() { os.Setenv("PANYA_MQTT_BROKER", prev) })
-	os.Setenv("PANYA_MQTT_BROKER", "tcp://env-broker:1883")
+	t.Setenv("PANYA_MQTT_BROKER", "tcp://env-broker:1883")
 
 	srv := NewServer(cfgPath, ":0", "tok", true, nil)
 

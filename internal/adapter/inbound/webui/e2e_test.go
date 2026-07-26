@@ -271,7 +271,9 @@ webui:
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	os.WriteFile(path, []byte(cfg), 0o600)
+	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
 
 	_, err := config.Load(path)
 	if err == nil {
@@ -297,14 +299,9 @@ func TestE2E_DefaultsWebUIDisabled(t *testing.T) {
 
 // TestE2E_EnvOverrides verifies env var overrides for webui config.
 func TestE2E_EnvOverridesWebUI(t *testing.T) {
-	os.Setenv("PANYA_WEBUI_ENABLED", "true")
-	os.Setenv("PANYA_WEBUI_LISTEN", "127.0.0.1:9999")
-	os.Setenv("PANYA_WEBUI_TOKEN", "env-token-32-chars-minimum-ok")
-	t.Cleanup(func() {
-		os.Unsetenv("PANYA_WEBUI_ENABLED")
-		os.Unsetenv("PANYA_WEBUI_LISTEN")
-		os.Unsetenv("PANYA_WEBUI_TOKEN")
-	})
+	t.Setenv("PANYA_WEBUI_ENABLED", "true")
+	t.Setenv("PANYA_WEBUI_LISTEN", "127.0.0.1:9999")
+	t.Setenv("PANYA_WEBUI_TOKEN", "env-token-32-chars-minimum-ok")
 
 	cfg, err := config.Load("")
 	if err != nil {
