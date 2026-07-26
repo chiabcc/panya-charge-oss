@@ -6,10 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/chiabcc/panya-charge-oss/internal/adapter/inbound/webui"
 	"github.com/chiabcc/panya-charge-oss/internal/config"
 	"github.com/chiabcc/panya-charge-oss/pkg/csmsfactory"
 )
@@ -84,6 +86,16 @@ func run(configPath string) error {
 		"base_topic", cfg.MQTT.BaseTopic,
 	)
 
+	if cfg.WebUI.Enabled {
+		isLoopback := isLoopback(cfg.WebUI.Listen)
+		srv := webui.NewServer(configPath, cfg.WebUI.Listen, cfg.WebUI.Token, isLoopback)
+		go func() {
+			if err := srv.Start(ctx); err != nil {
+				slog.Warn("webui start failed", "error", err)
+			}
+		}()
+	}
+
 	err = facade.Start(ctx)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return err
@@ -92,4 +104,12 @@ func run(configPath string) error {
 	facade.Stop()
 	slog.Info("shutdown complete")
 	return nil
+}
+
+func isLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr == "localhost" || addr == "::1"
+	}
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
 }
