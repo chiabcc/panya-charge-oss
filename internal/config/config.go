@@ -137,7 +137,12 @@ func applyEnvOverrides(cfg *Config) {
 	}
 
 	intOverrides := map[string]*int{
-		"PANYA_SERVER_OCPP_PORT": &cfg.Server.OCPPPort,
+		"PANYA_SERVER_OCPP_PORT":              &cfg.Server.OCPPPort,
+		"PANYA_CHARGING_MIN_AMPS":             &cfg.Charging.MinAmps,
+		"PANYA_CHARGING_MAX_AMPS":             &cfg.Charging.MaxAmps,
+		"PANYA_CHARGING_DEFAULT_AMPS":         &cfg.Charging.DefaultAmps,
+		"PANYA_CHARGING_CONTACTOR_COOLDOWN_SEC": &cfg.Charging.ContactorCooldownSec,
+		"PANYA_MQTT_DISCONNECT_THRESHOLD_SEC": &cfg.MQTT.DisconnectThresholdSec,
 	}
 	for env, ptr := range intOverrides {
 		if val := os.Getenv(env); val != "" {
@@ -155,6 +160,17 @@ func applyEnvOverrides(cfg *Config) {
 			if b, err := strconv.ParseBool(val); err == nil {
 				*ptr = b
 			}
+		}
+	}
+
+	topicOverrides := map[string]string{
+		"PANYA_MQTT_TOPIC_GRID_POWER":       "grid_power",
+		"PANYA_MQTT_TOPIC_SOLAR_POWER":      "solar_power",
+		"PANYA_MQTT_TOPIC_CONSUMPTION_POWER": "consumption_power",
+	}
+	for env, topicKey := range topicOverrides {
+		if val := os.Getenv(env); val != "" {
+			cfg.MQTT.Topics[topicKey] = val
 		}
 	}
 }
