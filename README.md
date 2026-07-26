@@ -59,6 +59,12 @@ PANYA_MQTT_BROKER=tcp://broker.local:1883 go run ./cmd/panya-charge-oss
 
 ## Config WebUI
 
+An optional embedded WebUI lets you edit `config.yaml` from a browser, with
+consequence-aware badges showing whether each change applies instantly,
+briefly disconnects the charger, or requires a restart.
+
+![WebUI config page](docs/images/webui-config.png)
+
 Enable in `config.yaml` (off by default):
 
 ```yaml
@@ -68,7 +74,10 @@ webui:
   token: "your-secret-token-here"
 ```
 
-Access at the configured address. For LAN access, a token is required. See [CONTEXT.md](CONTEXT.md) for architecture decisions.
+Access at the configured address. For LAN access, a token is required.
+
+See the **[Config WebUI guide](docs/webui.md)** for API access, security
+details, and how field changes apply.
 
 For library usage (embed the CSMS in your application), see
 [docs/development.md](docs/development.md).
