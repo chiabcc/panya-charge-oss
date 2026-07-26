@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"strconv"
@@ -309,13 +310,6 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-if isHtmxRequest(r) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := s.template.ExecuteTemplate(w, "fragments.html", vm); err != nil {
-			slog.Error("render config fragment template", "error", err)
-		}
-		return
-	}
 	// Default: serve JSON for API/programmatic requests (tests, CLI, etc.)
 	w.Header().Set("Content-Type", "application/json")
 	dto := buildConfigDTO(ec)
@@ -455,11 +449,6 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 
 	candidate := cloneConfig(current)
 	applyFormValues(candidate, r.Form, current)
-
-	if r.Form.Get("mqtt.password") == "" && !wasPasswordChanged(r.Form) {
-	}
-	if r.Form.Get("webui.token") == "" && !wasTokenChanged(r.Form) {
-	}
 
 	if err := config.Validate(candidate); err != nil {
 		slog.Warn("webui_config_rejected", "reason", "validation", "error", err)
@@ -691,9 +680,11 @@ func toUpper(s string) string {
 }
 
 func cloneConfig(c *config.Config) *config.Config {
+	m := c.MQTT
+	m.Topics = maps.Clone(c.MQTT.Topics)
 	return &config.Config{
 		Server:   c.Server,
-		MQTT:     c.MQTT,
+		MQTT:     m,
 		Charging: c.Charging,
 		WebUI:    c.WebUI,
 	}
@@ -850,10 +841,10 @@ func (s *Server) Start(ctx context.Context) error {
 	slog.Info("webui listening", "addr", s.listenAddr)
 
 	httpSrv := &http.Server{
-		Handler:  s.mux,
-		ReadHeaderTimeout:  5 * 60 * 1000,
-		WriteTimeout:       10 * 1000,
-		IdleTimeout:        120 * 1000,
+		Handler:           s.mux,
+		ReadHeaderTimeout: 5 * time.Minute,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 	}
 
 	go func() {
