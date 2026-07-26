@@ -42,4 +42,8 @@ type Facade interface {
 	// SetLogLevel adjusts the log level at runtime.
 	// Accepts: debug, info, warn, error (case-insensitive).
 	SetLogLevel(level string) error
+
+	// HasActiveSession returns the IDs of chargers with an active
+	// transaction and whether any active session exists.
+	HasActiveSession() (chargerIDs []string, hasActive bool)
 }

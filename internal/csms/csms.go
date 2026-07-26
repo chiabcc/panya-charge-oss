@@ -293,6 +293,32 @@ func (c *CSMS) UpdateCharging(params pkgcsms.ChargingParams) error {
 	return fmt.Errorf("minAmps (%d) > maxAmps (%d)", params.MinAmps, params.MaxAmps)
 }
 
+// HasActiveSession returns the IDs of chargers with an active transaction.
+func (c *CSMS) HasActiveSession() ([]string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	chargers, err := c.chargerRepo.ListChargers(ctx)
+	if err != nil {
+		return nil, false
+	}
+
+	var ids []string
+	for _, ch := range chargers {
+		conns, err := c.chargerRepo.ListConnectors(ctx, ch.ID)
+		if err != nil {
+			continue
+		}
+		for _, conn := range conns {
+			if active, _ := c.sessionRepo.GetActiveSession(ctx, ch.ID, conn.ConnectorID); active != nil {
+				ids = append(ids, ch.ID)
+				break
+			}
+		}
+	}
+	return ids, len(ids) > 0
+}
+
 // SetLogLevel adjusts the log level at runtime via LevelVar.
 func (c *CSMS) SetLogLevel(level string) error {
 	lv := parseLogLevel(level)
