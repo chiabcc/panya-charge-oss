@@ -42,9 +42,9 @@ type EffectiveConfig struct {
 	OverriddenByEnv map[string]bool `json:"overridden_by_env"`
 }
 
-// loadFileOnly reads the config from path without applying env overrides.
+// LoadFileOnly reads the config from path without applying env overrides.
 // Returns default config if path is empty or file does not exist.
-func loadFileOnly(path string) (*Config, error) {
+func LoadFileOnly(path string) (*Config, error) {
 	cfg := defaultConfig()
 
 	if path != "" {
@@ -66,7 +66,7 @@ func loadFileOnly(path string) (*Config, error) {
 // Effective loads the config at path, computes which fields are overridden by
 // environment variables, and returns a flattened, secret-masked view.
 func Effective(path string) (*EffectiveConfig, error) {
-	fileOnly, err := loadFileOnly(path)
+	fileOnly, err := LoadFileOnly(path)
 	if err != nil {
 		return nil, fmt.Errorf("load file-only config: %w", err)
 	}

@@ -205,3 +205,10 @@ func isLoopback(addr string) bool {
 func (c *Config) LogLevelUpper() string {
 	return strings.ToUpper(c.Server.LogLevel)
 }
+
+// Validate checks the config for correctness. Exported for use by the
+// WebUI save handler which builds a candidate config to validate before
+// persisting.
+func Validate(cfg *Config) error {
+	return cfg.validate()
+}

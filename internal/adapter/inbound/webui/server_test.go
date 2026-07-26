@@ -9,7 +9,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/chiabcc/panya-charge-oss/internal/config"
+	"github.com/chiabcc/panya-charge-oss/pkg/csms"
 )
 
 // numVal extracts an int from a JSON-decoded value (int or float64).
@@ -191,7 +196,7 @@ func TestHandleLogin(t *testing.T) {
 	t.Run("correct_token_redirects", func(t *testing.T) {
 		t.Parallel()
 		cfgPath := setupTestConfig(t)
-		srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true)
+		srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true, nil)
 
 		body := bytes.NewReader([]byte("token=test-token-32-chars-minimum-xx"))
 		req := httptest.NewRequest(http.MethodPost, "/login", body)
@@ -210,7 +215,7 @@ func TestHandleLogin(t *testing.T) {
 	t.Run("wrong_token_shows_error", func(t *testing.T) {
 		t.Parallel()
 		cfgPath := setupTestConfig(t)
-		srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true)
+		srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true, nil)
 
 		body := bytes.NewReader([]byte("token=wrong"))
 		req := httptest.NewRequest(http.MethodPost, "/login", body)
@@ -231,7 +236,7 @@ func TestHandleLogout(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := setupTestConfig(t)
-	srv := NewServer(cfgPath, ":0", "test-token", true)
+	srv := NewServer(cfgPath, ":0", "test-token", true, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
 	rec := httptest.NewRecorder()
@@ -252,7 +257,7 @@ func TestHandleIndex(t *testing.T) {
 	t.Run("no_token_loopback_redirects_to_config", func(t *testing.T) {
 		t.Parallel()
 		cfgPath := setupTestConfig(t)
-		srv := NewServer(cfgPath, ":0", "", true)
+		srv := NewServer(cfgPath, ":0", "", true, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()
@@ -266,7 +271,7 @@ func TestHandleIndex(t *testing.T) {
 	t.Run("with_token_no_cookie_shows_login", func(t *testing.T) {
 		t.Parallel()
 		cfgPath := setupTestConfig(t)
-		srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true)
+		srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()
@@ -284,7 +289,7 @@ func TestHandleIndex(t *testing.T) {
 	t.Run("with_token_valid_cookie_redirects", func(t *testing.T) {
 		t.Parallel()
 		cfgPath := setupTestConfig(t)
-		srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true)
+		srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "test-token-32-chars-minimum-xx"})
@@ -301,7 +306,7 @@ func TestHandleGetConfig(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := setupTestConfig(t)
-	srv := NewServer(cfgPath, ":0", "token", true)
+	srv := NewServer(cfgPath, ":0", "token", true, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	rec := httptest.NewRecorder()
@@ -402,7 +407,7 @@ webui:
 		t.Fatal(err)
 	}
 
-	srv := NewServer(cfgPath, ":0", "tok", true)
+	srv := NewServer(cfgPath, ":0", "tok", true, nil)
 
 	// First GET
 	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
@@ -455,26 +460,276 @@ webui:
 	}
 }
 
-func TestHandlePostConfig(t *testing.T) {
+func TestSaveHotFieldApplies(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := setupTestConfig(t)
-	srv := NewServer(cfgPath, ":0", "tok", true)
+	srv := NewServer(cfgPath, ":0", "tok", true, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewReader(nil))
+	body := "charging.min_amps=15&charging.max_amps=25&charging.contactor_cooldown_sec=200&charging.default_amps=15"
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	srv.handlePostConfig(rec, req)
 
-	if rec.Code != http.StatusNotImplemented {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotImplemented)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
+
+	var result applyResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if result.Action != "hot_reload" {
+		t.Errorf("action = %q, want hot_reload", result.Action)
+	}
+	if !contains(result.FieldsChanged, "charging.min_amps") {
+		t.Errorf("fields_changed missing charging.min_amps: %v", result.FieldsChanged)
+	}
+
+	data, _ := os.ReadFile(cfgPath)
+	if !bytes.Contains(data, []byte("min_amps: 15")) {
+		t.Error("config file not updated: min_amps should be 15")
+	}
+}
+
+func TestSaveValidationRejected(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := setupTestConfig(t)
+	srv := NewServer(cfgPath, ":0", "tok", true, nil)
+
+	body := "charging.min_amps=30&charging.max_amps=10"
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.handlePostConfig(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+
+	var result applyResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err == nil {
+		if result.Error == "" {
+			t.Error("expected error in response body")
+		}
+	}
+
+	data, _ := os.ReadFile(cfgPath)
+	if bytes.Contains(data, []byte("min_amps: 30")) {
+		t.Error("config file should not have been changed")
+	}
+}
+
+func TestSaveEnvFieldRejected(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	cfg := `server:
+  ocpp_port: 8887
+  ocpp_path: "/{ws}"
+  log_level: info
+  log_format: text
+mqtt:
+  broker: "tcp://file-broker:1883"
+  client_id: "panya"
+  base_topic: "panya"
+charging:
+  min_amps: 6
+  max_amps: 32
+  contactor_cooldown_sec: 180
+  default_amps: 6
+webui:
+  enabled: true
+  listen: "127.0.0.1:8888"
+  token: "tok"
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	prev := os.Getenv("PANYA_MQTT_BROKER")
+	t.Cleanup(func() { os.Setenv("PANYA_MQTT_BROKER", prev) })
+	os.Setenv("PANYA_MQTT_BROKER", "tcp://env-broker:1883")
+
+	srv := NewServer(cfgPath, ":0", "tok", true, nil)
+
+	body := "mqtt.broker=tcp://evil:1883"
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.handlePostConfig(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSaveProcessRestartFields(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := setupTestConfig(t)
+	srv := NewServer(cfgPath, ":0", "tok", true, nil)
+
+	body := "webui.listen=0.0.0.0%3A8888&webui.enabled=true"
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.handlePostConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+
+	var result applyResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if result.Action != "process_restart" {
+		t.Errorf("action = %q, want process_restart", result.Action)
+	}
+	if !result.RestartRequired {
+		t.Error("restart_required should be true")
+	}
+}
+
+func TestSaveEmptyPasswordKeepsExisting(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := setupTestConfig(t)
+	srv := NewServer(cfgPath, ":0", "tok", true, nil)
+
+	body := "charging.min_amps=6&mqtt.password="
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.handlePostConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+
+	ec, err := config.Effective(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ec.MQTTPasswordSet {
+		t.Error("password should still be set after empty save")
+	}
+}
+
+func TestRebuildSaveReturnsConfirmRequired(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := setupTestConfig(t)
+
+	mockApplier := &mockApplier{hasActive: true}
+	srv := NewServer(cfgPath, ":0", "tok", true, mockApplier)
+
+	srv.confirm = &confirmEntry{nonce: "test-nonce-123456789012", fields: []string{"mqtt.broker"}, expires: time.Now().Add(5 * time.Minute)}
+
+	body := "server.ocpp_port=9999&confirm_token=test-nonce-123456789012"
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.handlePostConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+
+	var result applyResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if result.Action != "rebuild" {
+		t.Errorf("action = %q, want rebuild (with confirm)", result.Action)
+	}
+}
+
+type mockApplier struct {
+	updateChargingCalled bool
+	setLogLevelCalled    bool
+	rebuildCalled        bool
+	hasActive            bool
+}
+
+func (m *mockApplier) UpdateCharging(params csms.ChargingParams) error {
+	m.updateChargingCalled = true
+	return nil
+}
+
+func (m *mockApplier) SetLogLevel(level string) error {
+	m.setLogLevelCalled = true
+	return nil
+}
+
+func (m *mockApplier) Rebuild(cfg *config.Config) error {
+	m.rebuildCalled = true
+	return nil
+}
+
+func (m *mockApplier) HasActiveSession() ([]string, bool) {
+	return nil, m.hasActive
+}
+
+func contains(s []string, v string) bool {
+	for _, n := range s {
+		if n == v {
+			return true
+		}
+	}
+	return false
+}
+
+func buildFullForm(cfgPath string, overrides map[string]string) (string, error) {
+	ec, err := config.Effective(cfgPath)
+	if err != nil {
+		return "", err
+	}
+
+	pairs := []string{
+		formField("server.ocpp_port", fmt.Sprintf("%d", ec.ServerOCPPPort)),
+		formField("server.ocpp_path", ec.ServerOCPPPath),
+		formField("server.log_level", ec.ServerLogLevel),
+		formField("server.log_format", ec.ServerLogFormat),
+		formField("mqtt.broker", ec.MQTTBroker),
+		formField("mqtt.client_id", ec.MQTTClientID),
+		formField("mqtt.base_topic", ec.MQTTBaseTopic),
+		formField("mqtt.disconnect_threshold_sec", fmt.Sprintf("%d", ec.MQTTDisconnectSec)),
+		formField("charging.min_amps", fmt.Sprintf("%d", ec.ChargingMinAmps)),
+		formField("charging.max_amps", fmt.Sprintf("%d", ec.ChargingMaxAmps)),
+		formField("charging.contactor_cooldown_sec", fmt.Sprintf("%d", ec.ChargingContactorsSec)),
+		formField("charging.default_amps", fmt.Sprintf("%d", ec.ChargingDefaultAmps)),
+		formField("webui.enabled", fmt.Sprintf("%v", ec.WebUIEnabled)),
+		formField("webui.listen", ec.WebUIListen),
+	}
+
+	for k, v := range overrides {
+		for i, p := range pairs {
+			if strings.HasPrefix(p, k+"=") {
+				pairs[i] = formField(k, v)
+				break
+			}
+		}
+	}
+
+	return strings.Join(pairs, "&"), nil
+}
+
+func formField(key, value string) string {
+	return key + "=" + value
 }
 
 func TestStaticAssetsServed(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := setupTestConfig(t)
-	srv := NewServer(cfgPath, ":0", "tok", true)
+	srv := NewServer(cfgPath, ":0", "tok", true, nil)
 
 	// Route through full mux
 	req := httptest.NewRequest(http.MethodGet, "/static/htmx.min.js", nil)
@@ -529,7 +784,7 @@ webui:
 	t.Cleanup(func() { os.Setenv("PANYA_MQTT_BROKER", prev) })
 	os.Setenv("PANYA_MQTT_BROKER", "tcp://env-broker:1883")
 
-	srv := NewServer(cfgPath, ":0", "tok", true)
+	srv := NewServer(cfgPath, ":0", "tok", true, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	rec := httptest.NewRecorder()
@@ -565,7 +820,7 @@ func TestNewServerNoAuthOnLoopback(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := setupTestConfig(t)
-	srv := NewServer(cfgPath, ":0", "", true)
+	srv := NewServer(cfgPath, ":0", "", true, nil)
 
 	// GET /api/config should work without cookie
 	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
@@ -581,7 +836,7 @@ func TestNewServerAuthRequiredWithToken(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := setupTestConfig(t)
-	srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true)
+	srv := NewServer(cfgPath, ":0", "test-token-32-chars-minimum-xx", true, nil)
 
 	// GET /api/config without cookie should get 401 (redirect from authMiddleware)
 	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)

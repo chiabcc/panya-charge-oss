@@ -88,7 +88,7 @@ func run(configPath string) error {
 
 	if cfg.WebUI.Enabled {
 		isLoopback := isLoopback(cfg.WebUI.Listen)
-		srv := webui.NewServer(configPath, cfg.WebUI.Listen, cfg.WebUI.Token, isLoopback)
+		srv := webui.NewServer(configPath, cfg.WebUI.Listen, cfg.WebUI.Token, isLoopback, nil)
 		go func() {
 			if err := srv.Start(ctx); err != nil {
 				slog.Warn("webui start failed", "error", err)
