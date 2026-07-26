@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 go build \
 FROM ghcr.io/home-assistant/base:latest
 
 COPY --from=builder /out/panya-charge-oss /usr/local/bin/panya-charge-oss
-COPY run.sh /run.sh
+COPY ha-addon/run.sh /run.sh
 RUN chmod a+x /run.sh
 
 WORKDIR /data
