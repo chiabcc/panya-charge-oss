@@ -23,7 +23,7 @@ WORKDIR /data
 
 COPY --from=builder /out/panya-charge-oss /usr/local/bin/panya-charge-oss
 
-EXPOSE 8887
+EXPOSE 8887 8888
 
 ENTRYPOINT ["/usr/local/bin/panya-charge-oss"]
 CMD ["-config", "/data/config.yaml"]

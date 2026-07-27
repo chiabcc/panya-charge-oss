@@ -64,6 +64,100 @@ When a change requires a rebuild and a charging session is active, the UI shows 
 
 `mqtt.password` and `webui.token` are **write-only** — they never appear in HTTP responses. The form shows a password field with a placeholder; leave it blank to keep the current value.
 
+## Status Page
+
+A read-only status page shows runtime information: OCPP URL for your charger, MQTT connection state, connected chargers, and smart charging readings. No authentication required — designed for HA ingress or loopback access.
+
+![Status page](images/webui-status.png)
+
+### Enable
+
+The status page is **enabled by default**. It runs on the same port as the config WebUI (`8888`), independent of `webui.enabled`:
+
+```yaml
+webui:
+  enabled: false           # config editor (off by default)
+  status_enabled: true     # status page (on by default)
+  listen: "127.0.0.1:8888"
+```
+
+Access at `http://127.0.0.1:8888/status`.
+
+### What it shows
+
+| Section | Data |
+|---|---|
+| **OCPP URL** | WebSocket URL for charger configuration: `ws://<host>:8887/{ws}` |
+| **MQTT Connection** | Connected/disconnected badge + broker address |
+| **Chargers** | Table: ID, vendor/model, status (Available/Charging/Faulted), connector, power, current limit |
+| **Smart Charging** | Enabled/disabled, safe amps fallback, grid/solar/consumption power readings |
+
+The page auto-refreshes every 10 seconds.
+
+### JSON API
+
+```bash
+curl http://127.0.0.1:8888/api/status
+```
+
+```json
+{
+  "mqtt": { "connected": true, "broker": "tcp://localhost:1883" },
+  "chargers": [],
+  "charging": { "current_amps": 6, "enabled": true, "grid_w": 0, "solar_w": 0, "consumption_w": 0 },
+  "ocpp": { "port": 8887, "path": "/{ws}" }
+}
+```
+
+### Home Assistant ingress
+
+In HA add-on mode, the status page is served via HA ingress. Click "Open Web UI" on the add-on page in HA. The config editor stays disabled — all configuration is done through HA's schema form.
+
+## Docker
+
+### Expose the Web UI
+
+The root `Dockerfile` exposes port `8887` (OCPP). To access the Web UI or status page, also publish port `8888`:
+
+```bash
+docker build -t panya-charge-oss .
+
+docker run -p 8887:8887 -p 8888:8888 \
+  -v $(pwd)/config.yaml:/data/config.yaml \
+  panya-charge-oss
+```
+
+Then access:
+- **Status page**: `http://localhost:8888/status`
+- **Config editor** (if `webui.enabled: true`): `http://localhost:8888`
+
+### Status page only
+
+To run with just the status page (no config editor), set env vars:
+
+```bash
+docker run -p 8887:8887 -p 8888:8888 \
+  -e PANYA_WEBUI_ENABLED=false \
+  -e PANYA_WEBUI_STATUS_ENABLED=true \
+  -e PANYA_MQTT_BROKER=tcp://host.docker.internal:1883 \
+  panya-charge-oss -config ""
+```
+
+> **Note**: Inside Docker, use `host.docker.internal` (or the host's IP) to reach an MQTT broker running on the host. `localhost` inside the container refers to the container itself.
+
+### Full config editor + status page
+
+```bash
+docker run -p 8887:8887 -p 8888:8888 \
+  -e PANYA_WEBUI_ENABLED=true \
+  -e PANYA_WEBUI_LISTEN=0.0.0.0:8888 \
+  -e PANYA_WEBUI_TOKEN=your-secret-token \
+  -e PANYA_MQTT_BROKER=tcp://host.docker.internal:1883 \
+  panya-charge-oss -config ""
+```
+
+Access config editor at `http://localhost:8888`, enter token to log in. Status page at `http://localhost:8888/status` is always accessible without auth.
+
 ## Architecture
 
 - **Go `html/template`** + vendored [htmx](https://htmx.org) for partial swaps
@@ -75,6 +169,8 @@ When a change requires a rebuild and a charging session is active, the UI shows 
 
 | Method | Path | Purpose |
 |---|---|---|
+| `GET` | `/status` | Status page (HTML, read-only) |
+| `GET` | `/api/status` | Runtime status (JSON) |
 | `GET` | `/api/config` | Effective config (HTML form or JSON via Accept header) |
 | `POST` | `/api/config` | Save config (htmx partial or JSON response) |
 | `POST` | `/login` | Authenticate with token |
