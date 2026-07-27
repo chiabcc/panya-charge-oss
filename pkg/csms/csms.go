@@ -46,4 +46,11 @@ type Facade interface {
 	// HasActiveSession returns the IDs of chargers with an active
 	// transaction and whether any active session exists.
 	HasActiveSession() (chargerIDs []string, hasActive bool)
+
+	// MQTTStatus returns the current MQTT connection state and broker address.
+	MQTTStatus() (connected bool, broker string)
+
+	// ChargingState returns a point-in-time snapshot of the smart charging
+	// runtime state.
+	ChargingState() ChargingState
 }

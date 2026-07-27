@@ -17,6 +17,8 @@ type Publisher struct {
 	client    mqtt.Client
 	baseTopic string
 	topics    map[string]string
+	broker    string
+	connected atomic.Bool
 	logger    *slog.Logger
 }
 
@@ -32,15 +34,18 @@ func NewPublisher(broker, clientID, username, password, baseTopic string, topics
 	opts.SetCleanSession(true)
 
 	p := &Publisher{
+		broker:    broker,
 		baseTopic: baseTopic,
 		topics:    topics,
 		logger:    logger,
 	}
 
 	opts.SetOnConnectHandler(func(c mqtt.Client) {
+		p.connected.Store(true)
 		p.logger.Info("mqtt connected", "broker", broker)
 	})
 	opts.SetConnectionLostHandler(func(c mqtt.Client, err error) {
+		p.connected.Store(false)
 		p.logger.Warn("mqtt connection lost", "err", err)
 	})
 
@@ -48,6 +53,7 @@ func NewPublisher(broker, clientID, username, password, baseTopic string, topics
 	if token := p.client.Connect(); token.Wait() && token.Error() != nil {
 		return nil, fmt.Errorf("mqtt connect %s: %w", broker, token.Error())
 	}
+	p.connected.Store(true)
 
 	logger.Info("mqtt publisher initialized", "broker", broker, "base_topic", baseTopic)
 	return p, nil
@@ -122,6 +128,11 @@ func (p *Publisher) Close() {
 // IsConnected reports whether the MQTT client has an active broker connection.
 func (p *Publisher) IsConnected() bool {
 	return p.client.IsConnected()
+}
+
+// Status returns the MQTT connection state and broker address.
+func (p *Publisher) Status() (connected bool, broker string) {
+	return p.connected.Load(), p.broker
 }
 
 // EnergyTracker tracks grid, solar, and consumption power readings from MQTT.

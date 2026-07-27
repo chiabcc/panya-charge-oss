@@ -331,6 +331,21 @@ func (c *CSMS) SetLogLevel(level string) error {
 	return nil
 }
 
+func (c *CSMS) MQTTStatus() (bool, string) {
+	return c.publisher.Status()
+}
+
+func (c *CSMS) ChargingState() pkgcsms.ChargingState {
+	state := c.controller.State()
+	return pkgcsms.ChargingState{
+		CurrentAmps:    state.CurrentAmps,
+		GridPowerW:     state.GridPowerW,
+		SolarPowerW:    state.SolarPowerW,
+		ConsumptionW:   state.ConsumptionW,
+		Enabled:        state.Enabled,
+	}
+}
+
 type cmdBridge struct {
 	commander   ports.ChargerCommander
 	chargerRepo ports.ChargerRepository

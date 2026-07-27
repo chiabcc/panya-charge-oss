@@ -71,6 +71,26 @@ func (c *Controller) IsEnabled() bool {
 	return c.enabled.Load()
 }
 
+// State returns a point-in-time snapshot of the controller's runtime state.
+func (c *Controller) State() smartcharging.ChargingState {
+	gridW := c.energySource.GetGridPowerW()
+	solarW := 0.0
+	if c.energySource.IsSolarAvailable(c.staleTimeout) {
+		solarW = c.energySource.GetSolarPowerW()
+	}
+	consumptionW := 0.0
+	if c.energySource.IsConsumptionAvailable(c.staleTimeout) {
+		consumptionW = c.energySource.GetConsumptionPowerW()
+	}
+	return smartcharging.ChargingState{
+		CurrentAmps:  c.safeAmps.Load(),
+		GridPowerW:   gridW,
+		SolarPowerW:  solarW,
+		ConsumptionW: consumptionW,
+		Enabled:      c.enabled.Load(),
+	}
+}
+
 func (c *Controller) SetEmitter(e EventEmitter) {
 	c.emitter = e
 }

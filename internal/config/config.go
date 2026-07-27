@@ -27,9 +27,10 @@ type ServerConfig struct {
 }
 
 type WebUIConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Listen  string `yaml:"listen"`
-	Token   string `yaml:"token"`
+	Enabled      bool   `yaml:"enabled"`
+	StatusEnabled bool   `yaml:"status_enabled"`
+	Listen       string `yaml:"listen"`
+	Token        string `yaml:"token"`
 }
 
 
@@ -105,9 +106,10 @@ func defaultConfig() *Config {
 		},
 		},
 		WebUI: WebUIConfig{
-			Enabled: false,
-			Listen:  "127.0.0.1:8888",
-			Token:   "",
+			Enabled:      false,
+			StatusEnabled: true,
+			Listen:       "127.0.0.1:8888",
+			Token:        "",
 		},
 		Charging: ChargingConfig{
 			MinAmps:              6,
@@ -153,7 +155,8 @@ func applyEnvOverrides(cfg *Config) {
 	}
 
 	boolOverrides := map[string]*bool{
-		"PANYA_WEBUI_ENABLED": &cfg.WebUI.Enabled,
+		"PANYA_WEBUI_ENABLED":         &cfg.WebUI.Enabled,
+		"PANYA_WEBUI_STATUS_ENABLED":  &cfg.WebUI.StatusEnabled,
 	}
 	for env, ptr := range boolOverrides {
 		if val := os.Getenv(env); val != "" {

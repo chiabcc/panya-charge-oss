@@ -3,6 +3,7 @@ set -euo pipefail
 
 # ---- Hard-disable WebUI in add-on context ----
 export PANYA_WEBUI_ENABLED=false
+export PANYA_WEBUI_STATUS_ENABLED=true
 
 # ---- Load user config from options.json (12 exports) ----
 export PANYA_MQTT_BASE_TOPIC="$(bashio::config 'base_topic')"
