@@ -15,15 +15,17 @@ RUN CGO_ENABLED=0 go build \
 	./cmd/panya-charge-oss/
 
 # ---------- Runtime stage ----------
-FROM ghcr.io/home-assistant/base:latest
+FROM alpine:3.20
+
+RUN apk add --no-cache bash jq curl
 
 COPY --from=builder /out/panya-charge-oss /usr/local/bin/panya-charge-oss
 COPY ha-addon/run.sh /run.sh
-RUN chmod a+x /run.sh
+RUN chmod +x /run.sh
 
 WORKDIR /data
 
-EXPOSE 8887
+EXPOSE 8887 8888
 
 LABEL \
 	io.hass.version="VERSION" \
