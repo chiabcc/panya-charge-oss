@@ -27,9 +27,10 @@ type ServerConfig struct {
 }
 
 type WebUIConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Listen  string `yaml:"listen"`
-	Token   string `yaml:"token"`
+	Enabled      bool   `yaml:"enabled"`
+	StatusEnabled bool   `yaml:"status_enabled"`
+	Listen       string `yaml:"listen"`
+	Token        string `yaml:"token"`
 }
 
 
@@ -105,9 +106,10 @@ func defaultConfig() *Config {
 		},
 		},
 		WebUI: WebUIConfig{
-			Enabled: false,
-			Listen:  "127.0.0.1:8888",
-			Token:   "",
+			Enabled:      false,
+			StatusEnabled: true,
+			Listen:       "127.0.0.1:8888",
+			Token:        "",
 		},
 		Charging: ChargingConfig{
 			MinAmps:              6,
@@ -137,7 +139,12 @@ func applyEnvOverrides(cfg *Config) {
 	}
 
 	intOverrides := map[string]*int{
-		"PANYA_SERVER_OCPP_PORT": &cfg.Server.OCPPPort,
+		"PANYA_SERVER_OCPP_PORT":              &cfg.Server.OCPPPort,
+		"PANYA_CHARGING_MIN_AMPS":             &cfg.Charging.MinAmps,
+		"PANYA_CHARGING_MAX_AMPS":             &cfg.Charging.MaxAmps,
+		"PANYA_CHARGING_DEFAULT_AMPS":         &cfg.Charging.DefaultAmps,
+		"PANYA_CHARGING_CONTACTOR_COOLDOWN_SEC": &cfg.Charging.ContactorCooldownSec,
+		"PANYA_MQTT_DISCONNECT_THRESHOLD_SEC": &cfg.MQTT.DisconnectThresholdSec,
 	}
 	for env, ptr := range intOverrides {
 		if val := os.Getenv(env); val != "" {
@@ -148,13 +155,25 @@ func applyEnvOverrides(cfg *Config) {
 	}
 
 	boolOverrides := map[string]*bool{
-		"PANYA_WEBUI_ENABLED": &cfg.WebUI.Enabled,
+		"PANYA_WEBUI_ENABLED":         &cfg.WebUI.Enabled,
+		"PANYA_WEBUI_STATUS_ENABLED":  &cfg.WebUI.StatusEnabled,
 	}
 	for env, ptr := range boolOverrides {
 		if val := os.Getenv(env); val != "" {
 			if b, err := strconv.ParseBool(val); err == nil {
 				*ptr = b
 			}
+		}
+	}
+
+	topicOverrides := map[string]string{
+		"PANYA_MQTT_TOPIC_GRID_POWER":       "grid_power",
+		"PANYA_MQTT_TOPIC_SOLAR_POWER":      "solar_power",
+		"PANYA_MQTT_TOPIC_CONSUMPTION_POWER": "consumption_power",
+	}
+	for env, topicKey := range topicOverrides {
+		if val := os.Getenv(env); val != "" {
+			cfg.MQTT.Topics[topicKey] = val
 		}
 	}
 }

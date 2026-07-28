@@ -64,10 +64,14 @@ func run(configPath string) error {
 
 	applier := newWebUIApplier(facade, ctx)
 
-	if cfg.WebUI.Enabled {
+	if cfg.WebUI.Enabled || cfg.WebUI.StatusEnabled {
 		isLoopback := isLoopback(cfg.WebUI.Listen)
 		srv := webui.NewServer(configPath, cfg.WebUI.Listen, cfg.WebUI.Token, isLoopback, applier)
+		if cfg.WebUI.StatusEnabled {
+			srv.WithStatus(facade, cfg.Server.OCPPPort, cfg.Server.OCPPPath)
+		}
 		go func() {
+			slog.Info("starting webui", "listen", cfg.WebUI.Listen, "config_enabled", cfg.WebUI.Enabled, "status_enabled", cfg.WebUI.StatusEnabled)
 			if err := srv.Start(ctx); err != nil {
 				slog.Warn("webui start failed", "error", err)
 			}

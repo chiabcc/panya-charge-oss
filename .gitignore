@@ -10,6 +10,9 @@
 config.yaml
 config.local.yaml
 
+# Exception: HA add-on manifest must be tracked despite filename
+!ha-addon/config.yaml
+
 # Test artifacts
 *.out
 coverage.out

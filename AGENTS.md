@@ -38,6 +38,11 @@ internal/
 pkg/
   csms/               # public facade: Facade interface + Events
   csmsfactory/        # factory: New(cfg) → Facade
+ha-addon/             # HA Add-on Store packaging
+    config.yaml       # HA add-on manifest (schema, NOT panya app config)
+    run.sh            # bashio launcher (translates options.json → PANYA_* env vars)
+    Dockerfile        # Multi-stage build (golang builder → HA base image)
+    README.md         # Add-on store landing page
 ```
 
 ## Build Commands
@@ -56,6 +61,9 @@ go vet ./...            # Static analysis
 4. **MQTT disconnect > 60s → revert to safe state (6A minimum)** — when grid power data is stale, the controller falls back to the minimum current.
 5. **`SetChargingProfile` is local-only — NEVER forwarded upstream** — charging profiles are managed by this CSMS only, never relayed to vendor clouds.
 6. **WebUI binds loopback by default; non-loopback bind REQUIRES webui.token; mqtt.password must never appear in any HTTP response.**
+7. **`config.yaml` filename is RESERVED by HA Supervisor's recursive search.** Do not move or rename `ha-addon/config.yaml`. Repo root's `config.yaml.example` is safe (`.example` suffix prevents discovery).
+8. **HA add-on mode forces `webui.enabled=false`**; the bashio launcher (`ha-addon/run.sh`) is the sole bridge between Supervisor's options.json and panya's env vars.
+9. **`repository.yaml` at repo root is the HA add-on repo registration file.**
 
 ## Hardware Target
 

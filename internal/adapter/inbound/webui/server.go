@@ -110,6 +110,10 @@ func templateFuncs() template.FuncMap {
 			}
 			return d
 		},
+		"formatPower": func(watts float64) string {
+			kw := watts / 1000.0
+			return strconv.FormatFloat(kw, 'f', 1, 64) + " kW"
+		},
 	}
 }
 
@@ -128,6 +132,7 @@ func NewServer(configPath string, listenAddr string, token string, isLoopback bo
 		"templates/login.html",
 		"templates/config.html",
 		"templates/fragments.html",
+		"templates/status.html",
 	)
 	if err != nil {
 		slog.Error("parse webui templates", "error", err)
@@ -163,15 +168,18 @@ func NewServer(configPath string, listenAddr string, token string, isLoopback bo
 }
 
 type Server struct {
-	mux        *http.ServeMux
-	configPath string
-	listenAddr string
-	token      string
-	isLoopback bool
-	template   *template.Template
-	applier    Applier
-	mu         sync.Mutex
-	confirm    *confirmEntry
+	mux            *http.ServeMux
+	configPath     string
+	listenAddr     string
+	token          string
+	isLoopback     bool
+	template       *template.Template
+	applier        Applier
+	statusProvider StatusProvider
+	ocppPort       int
+	ocppPath       string
+	mu             sync.Mutex
+	confirm        *confirmEntry
 }
 
 type loginData struct {

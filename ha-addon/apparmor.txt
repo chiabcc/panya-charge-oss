@@ -1,0 +1,14 @@
+#include <tunables/global>
+
+profile panya-charge-oss name="haproxy_panya-charge-oss" {
+  #include <abstractions/base>
+
+  file,
+  network,
+
+  /usr/bin/python3* mr,
+  /usr/bin/env mr,
+
+  @{BASE_DIR}/rootfs/** rwk,
+  /run/udev/tags/** r,
+}

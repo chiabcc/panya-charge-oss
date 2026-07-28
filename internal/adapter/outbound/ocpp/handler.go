@@ -518,7 +518,13 @@ func (h *Handler) OnConnect(chargePointID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := h.chargerRepo.MarkOnline(ctx, chargePointID, true); err != nil {
-		h.logger.Error("failed to mark charger online", "err", err, "charger", chargePointID)
+		h.logger.Debug("creating charger placeholder on first connect", "charger", chargePointID)
+		if err := h.chargerRepo.UpsertCharger(ctx, charger.Charger{
+			ID:     chargePointID,
+			Online: true,
+		}); err != nil {
+			h.logger.Error("failed to create charger placeholder", "err", err, "charger", chargePointID)
+		}
 	}
 	h.publisher.PublishChargerOnline(chargePointID, true)
 

@@ -1,0 +1,94 @@
+{{ define "status.html" }}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="10">
+    <title>Panya Charge — Status</title>
+    <link rel="stylesheet" href="{{ .IngressPath }}/static/app.css">
+</head>
+<body>
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <h1>Panya Charge</h1>
+                <div class="subtitle">Runtime status</div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center">
+                <a href="{{ .IngressPath }}/status" class="refresh-link">↻ Refresh</a>
+                <a href="{{ .IngressPath }}" class="status-nav-link">Config</a>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-name">OCPP URL</div>
+            <code class="ocpp-url">ws://&lt;host&gt;:{{ .OCPPPort }}{{ .OCPPPath }}</code>
+            <div class="helper">Replace &lt;host&gt; with your HA IP address</div>
+        </div>
+
+        <div class="section">
+            <div class="section-name">MQTT Connection</div>
+            <div class="status-row">
+                <span class="b b-{{ if .MQTTConnected }}hot{{ else }}restart{{ end }}">{{ if .MQTTConnected }}Connected{{ else }}Disconnected{{ end }}</span>
+                <span class="status-value">{{ .MQTTBroker }}</span>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-name">Chargers</div>
+            {{ if .Chargers }}
+            <table class="chargers-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Device</th>
+                        <th>Status</th>
+                        <th>Connector</th>
+                        <th>Power</th>
+                        <th>Limit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range .Chargers }}
+                    <tr>
+                        <td class="charger-id">{{ .ID }}</td>
+                        <td>{{ if and .Vendor .Model }}{{ .Vendor }} / {{ .Model }}{{ else }}—{{ end }}</td>
+                        <td>{{ .Status }}</td>
+                        <td>{{ .ConnectorID }}</td>
+                        <td>{{ .ChargerPowerKW }}</td>
+                        <td>{{ .LimitAmps }} A</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+            {{ else }}
+            <div class="status-empty">No chargers connected</div>
+            {{ end }}
+        </div>
+
+        <div class="section">
+            <div class="section-name">Smart Charging</div>
+            <div class="status-row">
+                <span class="b b-{{ if .Charging.Enabled }}hot{{ else }}restart{{ end }}">{{ if .Charging.Enabled }}Enabled{{ else }}Disabled{{ end }}</span>
+                <span class="status-value">{{ .Charging.CurrentAmps }} A</span>
+            </div>
+            <div class="charging-rows">
+                <div class="charging-row">
+                    <span class="charging-label">Grid</span>
+                    <span>{{ .Charging.GridPowerW | formatPower }}</span>
+                </div>
+                <div class="charging-row">
+                    <span class="charging-label">Solar</span>
+                    <span>{{ .Charging.SolarPowerW | formatPower }}</span>
+                </div>
+                <div class="charging-row">
+                    <span class="charging-label">Consumption</span>
+                    <span>{{ .Charging.ConsumptionW | formatPower }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+{{ end }}

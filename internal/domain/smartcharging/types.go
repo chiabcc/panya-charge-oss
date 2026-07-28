@@ -31,3 +31,13 @@ type ChargingProfileRequest struct {
 	// (no solar surplus available, grid import would be required).
 	ShouldStop bool
 }
+
+// ChargingState is a point-in-time snapshot of the smart charging
+// controller's runtime state.
+type ChargingState struct {
+	CurrentAmps    int32
+	GridPowerW     float64
+	SolarPowerW    float64
+	ConsumptionW   float64
+	Enabled        bool
+}
