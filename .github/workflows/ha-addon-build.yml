@@ -17,6 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -30,9 +34,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push HA add-on
-        uses: home-assistant/builder@2026.02.1
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
         with:
           context: .
-          config: ha-addon/config.yaml
-          repositories: chiabcc/panya-charge-oss
+          file: ha-addon/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/chiabcc/panya-charge-oss:latest
+            ghcr.io/chiabcc/panya-charge-oss:${{ steps.version.outputs.VERSION }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update HA add-on manifest version
+        run: |
+          sed -i 's/version: "0.0.0"/version: "${{ steps.version.outputs.VERSION }}"/' ha-addon/config.yaml
+          cat ha-addon/config.yaml | head -3
