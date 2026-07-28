@@ -1,11 +1,12 @@
 name: "Panya Charge OSS"
-version: "0.0.0"
+version: "0.1.0"
 slug: panya_charge_oss
 description: "OCPP 1.6-J EV charger bridge for Home Assistant. Connects any OCPP 1.6-J charger (target: ABB Terra AC) to HA via MQTT for smart charging with solar surplus optimization."
 arch:
   - aarch64
   - amd64
 url: https://github.com/chiabcc/panya-charge-oss
+image: ghcr.io/chiabcc/panya-charge-oss
 startup: services
 boot: auto
 ports:
