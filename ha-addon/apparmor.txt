@@ -1,0 +1,11 @@
+#include <tunables/global>
+
+profile panya-charge-oss flags=(attach_disconnected) {
+  #include <abstractions/base>
+
+  file,
+  network,
+
+  /run/** rw,
+  /data/** rwk,
+}
