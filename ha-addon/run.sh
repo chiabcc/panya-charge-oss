@@ -1,43 +1,43 @@
-#!/usr/bin/env bashio
+#!/bin/bash
 set -euo pipefail
 
-# ---- Hard-disable WebUI in add-on context ----
 export PANYA_WEBUI_ENABLED=false
 export PANYA_WEBUI_STATUS_ENABLED=true
 
-# ---- Load user config from options.json (12 exports) ----
-export PANYA_MQTT_BASE_TOPIC="$(bashio::config 'base_topic')"
-export PANYA_MQTT_CLIENT_ID="$(bashio::config 'client_id')"
-export PANYA_SERVER_LOG_LEVEL="$(bashio::config 'log_level')"
-export PANYA_SERVER_LOG_FORMAT="$(bashio::config 'log_format')"
-export PANYA_CHARGING_MIN_AMPS="$(bashio::config 'min_amps')"
-export PANYA_CHARGING_MAX_AMPS="$(bashio::config 'max_amps')"
-export PANYA_CHARGING_DEFAULT_AMPS="$(bashio::config 'default_amps')"
-export PANYA_CHARGING_CONTACTOR_COOLDOWN_SEC="$(bashio::config 'contactor_cooldown_sec')"
-export PANYA_MQTT_DISCONNECT_THRESHOLD_SEC="$(bashio::config 'disconnect_threshold_sec')"
-export PANYA_MQTT_TOPIC_GRID_POWER="$(bashio::config 'grid_power_topic')"
-export PANYA_MQTT_TOPIC_SOLAR_POWER="$(bashio::config 'solar_power_topic')"
-export PANYA_MQTT_TOPIC_CONSUMPTION_POWER="$(bashio::config 'consumption_power_topic')"
+OPTIONS="/data/options.json"
+SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN:-}"
 
-# ---- Fetch MQTT credentials via dedicated Services API calls ----
-MQTT_HOST="$(bashio::services mqtt 'host')"
-MQTT_USER="$(bashio::services mqtt 'username')"
-MQTT_PASSWORD="$(bashio::services mqtt 'password')"
+opt() {
+    jq -r "$1 // empty" "$OPTIONS"
+}
 
-# ---- Guard: MQTT host must be provided ----
+export PANYA_MQTT_BASE_TOPIC="$(opt '.base_topic')"
+export PANYA_MQTT_CLIENT_ID="$(opt '.client_id')"
+export PANYA_SERVER_LOG_LEVEL="$(opt '.log_level')"
+export PANYA_SERVER_LOG_FORMAT="$(opt '.log_format')"
+export PANYA_CHARGING_MIN_AMPS="$(opt '.min_amps')"
+export PANYA_CHARGING_MAX_AMPS="$(opt '.max_amps')"
+export PANYA_CHARGING_DEFAULT_AMPS="$(opt '.default_amps')"
+export PANYA_CHARGING_CONTACTOR_COOLDOWN_SEC="$(opt '.contactor_cooldown_sec')"
+export PANYA_MQTT_DISCONNECT_THRESHOLD_SEC="$(opt '.disconnect_threshold_sec')"
+export PANYA_MQTT_TOPIC_GRID_POWER="$(opt '.grid_power_topic')"
+export PANYA_MQTT_TOPIC_SOLAR_POWER="$(opt '.solar_power_topic')"
+export PANYA_MQTT_TOPIC_CONSUMPTION_POWER="$(opt '.consumption_power_topic')"
+
+MQTT_HOST="$(curl -sf -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/core/api/services/mqtt | jq -r '.host // empty')"
+MQTT_USER="$(curl -sf -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/core/api/services/mqtt | jq -r '.username // empty')"
+MQTT_PASSWORD="$(curl -sf -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/core/api/services/mqtt | jq -r '.password // empty')"
+
 if [[ -z "${MQTT_HOST}" ]]; then
-    bashio::log.error "MQTT service not available via HA Services API"
-    bashio::exit.nogood
+    echo "ERROR: MQTT service not available via Supervisor API"
+    exit 1
 fi
 
-# ---- Broker URL (Mosquitto add-on internal port — Services API does not expose it) ----
 export PANYA_MQTT_BROKER="tcp://${MQTT_HOST}:1883"
 
-# ---- Export auth only when non-empty (empty = no auth in Go defaults) ----
 if [[ -n "${MQTT_USER}" ]]; then
     export PANYA_MQTT_USERNAME="${MQTT_USER}"
     export PANYA_MQTT_PASSWORD="${MQTT_PASSWORD}"
 fi
 
-# ---- Exec binary with empty config path (env-var-only mode) ----
 exec /usr/local/bin/panya-charge-oss -config ""
