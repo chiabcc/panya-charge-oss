@@ -24,16 +24,35 @@ export PANYA_MQTT_TOPIC_GRID_POWER="$(opt '.grid_power_topic')"
 export PANYA_MQTT_TOPIC_SOLAR_POWER="$(opt '.solar_power_topic')"
 export PANYA_MQTT_TOPIC_CONSUMPTION_POWER="$(opt '.consumption_power_topic')"
 
-MQTT_HOST="$(curl -sf -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/core/api/services/mqtt | jq -r '.host // empty')"
-MQTT_USER="$(curl -sf -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/core/api/services/mqtt | jq -r '.username // empty')"
-MQTT_PASSWORD="$(curl -sf -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/core/api/services/mqtt | jq -r '.password // empty')"
+SERVICES_JSON="$(curl -sf -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/services/mqtt)" || {
+    echo "ERROR: cannot reach Supervisor services API"
+    exit 1
+}
 
-if [[ -z "${MQTT_HOST}" ]]; then
-    echo "ERROR: MQTT service not available via Supervisor API"
+RESULT="$(printf '%s' "${SERVICES_JSON}" | jq -r '.result // empty')"
+if [[ "${RESULT}" != "ok" ]]; then
+    MESSAGE="$(printf '%s' "${SERVICES_JSON}" | jq -r '.message // "unknown error"')"
+    echo "ERROR: MQTT service not available via Supervisor API: ${MESSAGE}"
+    echo "Hint: install and start the Mosquitto broker add-on, then restart this add-on."
     exit 1
 fi
 
-export PANYA_MQTT_BROKER="tcp://${MQTT_HOST}:1883"
+MQTT_HOST="$(printf '%s' "${SERVICES_JSON}" | jq -r '.data.host // empty')"
+MQTT_PORT="$(printf '%s' "${SERVICES_JSON}" | jq -r '.data.port // 1883')"
+MQTT_SSL="$(printf '%s' "${SERVICES_JSON}" | jq -r '.data.ssl // false')"
+MQTT_USER="$(printf '%s' "${SERVICES_JSON}" | jq -r '.data.username // empty')"
+MQTT_PASSWORD="$(printf '%s' "${SERVICES_JSON}" | jq -r '.data.password // empty')"
+
+if [[ -z "${MQTT_HOST}" ]]; then
+    echo "ERROR: MQTT service response missing host"
+    exit 1
+fi
+
+SCHEME="tcp"
+if [[ "${MQTT_SSL}" == "true" ]]; then
+    SCHEME="ssl"
+fi
+export PANYA_MQTT_BROKER="${SCHEME}://${MQTT_HOST}:${MQTT_PORT}"
 
 if [[ -n "${MQTT_USER}" ]]; then
     export PANYA_MQTT_USERNAME="${MQTT_USER}"
