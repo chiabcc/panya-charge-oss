@@ -31,7 +31,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push HA add-on
-        uses: home-assistant/builder@2026.6.0
+        uses: home-assistant/builder@2026.06.0
         with:
           context: .
           config: ha-addon/config.yaml
