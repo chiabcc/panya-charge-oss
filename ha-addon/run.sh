@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv bashio
+#!/usr/bin/env bashio
 set -euo pipefail
 
 # ---- Hard-disable WebUI in add-on context ----
