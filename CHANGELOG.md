@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0](https://github.com/chiabcc/panya-charge-oss/compare/v0.0.2...v0.1.0) (2026-07-28)
+
+
+### Features
+
+* embedded config WebUI with selective hot reload ([#8](https://github.com/chiabcc/panya-charge-oss/issues/8)) ([554d09a](https://github.com/chiabcc/panya-charge-oss/commit/554d09a18d51340cc172f4277325874dd1b25bfd))
+* Home Assistant add-on packaging with read-only status page ([#9](https://github.com/chiabcc/panya-charge-oss/issues/9)) ([1df923e](https://github.com/chiabcc/panya-charge-oss/commit/1df923eeae1cde341fbbbf03e4c4c343980e6033))
+* **smart-charging:** add global ON/OFF toggle switch for HA ([#6](https://github.com/chiabcc/panya-charge-oss/issues/6)) ([b1315b1](https://github.com/chiabcc/panya-charge-oss/commit/b1315b18629b44f6ee61580ba445acdfa93a0808))
+
+
+### Bug Fixes
+
+* **ci:** correct HA builder version tag format ([74e4569](https://github.com/chiabcc/panya-charge-oss/commit/74e45697a0c0f3151a864ec681c47fe691e45e4e))
+* **ci:** replace deprecated HA builder with standard Docker buildx ([f1e42bb](https://github.com/chiabcc/panya-charge-oss/commit/f1e42bb1520a4a76d88e10a56d98a32ee52a608d))
+* **ci:** use last legacy HA builder version (2026.02.1) ([fe7b4e4](https://github.com/chiabcc/panya-charge-oss/commit/fe7b4e44342bc691a292f9c43164533d4089f13e))
+* **ci:** zero-pad HA builder version (2026.06.0) ([263d805](https://github.com/chiabcc/panya-charge-oss/commit/263d805b8cafd0c1f4f91731148873057644d22a))
+* **dev-stack:** correct MQTT broker hostname and HA config for compose ([#5](https://github.com/chiabcc/panya-charge-oss/issues/5)) ([4ddb518](https://github.com/chiabcc/panya-charge-oss/commit/4ddb518ac2371ff7f20782b5151e285dca17223f))
+* **ha-addon:** add image field for GHCR + set version 0.1.0 ([4f44530](https://github.com/chiabcc/panya-charge-oss/commit/4f445308a328fbaec05c61f8fc4f164dfbe2874e))
+
 ## [0.0.2](https://github.com/chiabcc/panya-charge-oss/compare/v0.0.1...v0.0.2) (2026-07-18)
 
 
