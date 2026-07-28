@@ -181,7 +181,19 @@ entities within a few seconds:
 
 See [docs/home-assistant.md](home-assistant.md) for the full entity reference.
 
-### 5. Test Control
+### 5. Open the Status Page
+
+Click **Open Web UI** on the add-on page. The status page loads via HA ingress,
+showing:
+
+- **OCPP URL** — the WebSocket address to enter in your charger's settings
+- **MQTT Connection** — connected/disconnected badge + broker address
+- **Chargers** — table with ID, model, status, connector, power, current limit
+- **Smart Charging** — enabled/disabled, safe amps, grid/solar/consumption readings
+
+The page auto-refreshes every 10 seconds.
+
+### 6. Test Control
 
 - Toggle the **Charging** switch in the HA UI to start/stop a session
 - Adjust the **Charging Current** slider to change the current limit

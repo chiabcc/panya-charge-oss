@@ -95,31 +95,41 @@ Override any value via environment variables (`PANYA_<SECTION>_<KEY>`):
 PANYA_MQTT_BROKER=tcp://broker.local:1883 go run ./cmd/panya-charge-oss
 ```
 
-## Config WebUI
+## Config WebUI & Status Page
 
-An optional embedded WebUI lets you edit `config.yaml` from a browser, with
-consequence-aware badges showing whether each change applies instantly,
-briefly disconnects the charger, or requires a restart.
+The embedded WebUI has two modes, controlled independently:
+
+### Status Page (read-only, on by default)
+
+Shows runtime information — OCPP URL, MQTT connection state, connected chargers, and smart charging readings. Auto-refreshes every 10 seconds. No authentication required.
+
+![Status page](docs/images/webui-status.png)
+
+Enabled by default on port 8888. Access at `http://localhost:8888/status`.
+
+In HA add-on mode, the status page is served via HA ingress — click **Open Web UI** on the add-on page.
+
+### Config Editor (read-write, off by default)
+
+Lets you edit `config.yaml` from a browser, with consequence-aware badges showing whether each change applies instantly, briefly disconnects the charger, or requires a restart.
 
 ![WebUI config page](docs/images/webui-config.png)
 
-Enable in `config.yaml` (off by default):
+Enable in `config.yaml`:
 
 ```yaml
 webui:
-  enabled: true
+  enabled: true            # config editor (off by default)
+  status_enabled: true     # status page (on by default)
   listen: "127.0.0.1:8888"
   token: "your-secret-token-here"
 ```
 
 Access at the configured address. For LAN access, a token is required.
 
-> **Note:** The Config WebUI is **not available** in Home Assistant Add-on mode.
-> Use the add-on's built-in Configuration tab instead, which is also available
-> through HA's web UI.
+> **Note:** The config editor is **not available** in HA add-on mode (only the read-only status page is served via ingress). Use the add-on's Configuration tab to edit settings.
 
-See the **[Config WebUI guide](docs/webui.md)** for API access, security
-details, and how field changes apply.
+See the **[Config WebUI guide](docs/webui.md)** for API access, security details, and Docker instructions.
 
 For library usage (embed the CSMS in your application), see
 [docs/development.md](docs/development.md).

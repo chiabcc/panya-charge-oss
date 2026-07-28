@@ -89,6 +89,10 @@ go run ./cmd/panya-charge-oss
 The CSMS listens on port 8887 for OCPP WebSocket connections.
 Point your charger to `ws://localhost:8887/{ws}`.
 
+A read-only status page is available at `http://localhost:8888/status` (on by
+default). It shows the OCPP URL, MQTT connection state, connected chargers, and
+smart charging readings.
+
 ## Docker Compose Dev Stack
 
 For end-to-end development against Home Assistant, use the bundled compose
@@ -96,7 +100,7 @@ stack. It brings up:
 
 | Service | Container | Port | Purpose |
 |---------|-----------|------|---------|
-| CSMS | `panya-csms` | 8887 | panya-charge-oss built from your local source |
+| CSMS | `panya-csms` | 8887, 8888 | panya-charge-oss built from your local source (OCPP + status page) |
 | Mosquitto | `panya-mosquitto` | 1883 | MQTT broker |
 | Home Assistant | `panya-ha` | 8123 | Auto-discovers charger entities |
 
