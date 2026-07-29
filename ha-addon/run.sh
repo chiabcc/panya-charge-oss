@@ -21,9 +21,6 @@ export PANYA_CHARGING_MAX_AMPS="$(opt '.max_amps')"
 export PANYA_CHARGING_DEFAULT_AMPS="$(opt '.default_amps')"
 export PANYA_CHARGING_CONTACTOR_COOLDOWN_SEC="$(opt '.contactor_cooldown_sec')"
 export PANYA_MQTT_DISCONNECT_THRESHOLD_SEC="$(opt '.disconnect_threshold_sec')"
-export PANYA_MQTT_TOPIC_GRID_POWER="$(opt '.grid_power_topic')"
-export PANYA_MQTT_TOPIC_SOLAR_POWER="$(opt '.solar_power_topic')"
-export PANYA_MQTT_TOPIC_CONSUMPTION_POWER="$(opt '.consumption_power_topic')"
 
 MQTT_BROKER_OPT="$(opt '.mqtt_broker')"
 
@@ -95,9 +92,9 @@ else
 fi
 
 # Energy entity IDs (native HA entity reader)
-export PANYA_ENERGY_HASS_GRID_ENTITY_ID="${grid_entity_id:-}"
-export PANYA_ENERGY_HASS_SOLAR_ENTITY_ID="${solar_entity_id:-}"
-export PANYA_ENERGY_HASS_CONSUMPTION_ENTITY_ID="${consumption_entity_id:-}"
+export PANYA_ENERGY_HASS_GRID_ENTITY_ID="$(opt '.grid_entity_id')"
+export PANYA_ENERGY_HASS_SOLAR_ENTITY_ID="$(opt '.solar_entity_id')"
+export PANYA_ENERGY_HASS_CONSUMPTION_ENTITY_ID="$(opt '.consumption_entity_id')"
 
 # Supervisor token for HA API calls
 export PANYA_HASS_TOKEN="${SUPERVISOR_TOKEN:-}"

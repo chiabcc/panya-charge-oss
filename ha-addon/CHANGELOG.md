@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.19
+
+- Entity selectors: pick grid/solar/consumption sensors from a dropdown instead of typing entity IDs
+- Remove deprecated MQTT energy topic fields from add-on configuration
+
 ## 0.1.18
 
 - Native HA entity reader: read solar/grid/consumption entities directly via Supervisor API
