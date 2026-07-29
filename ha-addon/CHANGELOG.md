@@ -4,6 +4,7 @@
 
 - Entity selectors: pick grid/solar/consumption sensors from a dropdown instead of typing entity IDs
 - Remove deprecated MQTT energy topic fields from add-on configuration
+- Restore external MQTT broker override (mqtt_broker/username/password) for non-HA Mosquitto users
 
 ## 0.1.18
 
