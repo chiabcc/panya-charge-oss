@@ -21,6 +21,8 @@ RUN apk add --no-cache bash jq curl
 
 COPY --from=builder /out/panya-charge-oss /usr/local/bin/panya-charge-oss
 COPY ha-addon/run.sh /run.sh
+COPY ha-addon/icon.png /icon.png
+COPY ha-addon/logo.png /logo.png
 RUN chmod +x /run.sh
 
 WORKDIR /data

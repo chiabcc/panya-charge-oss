@@ -5,7 +5,7 @@
 - Entity selectors: pick grid/solar/consumption sensors from a dropdown instead of typing entity IDs
 - Remove deprecated MQTT energy topic fields from add-on configuration
 - Restore external MQTT broker override (mqtt_broker/username/password) for non-HA Mosquitto users
-- Fix logo not showing on add-on info page
+- Fix icon and logo not loading — copy image files into Docker image so sidebar shows the real icon
 
 ## 0.1.18
 
