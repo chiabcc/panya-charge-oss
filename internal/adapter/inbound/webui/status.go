@@ -19,6 +19,7 @@ type StatusProvider interface {
 
 type statusPageData struct {
 	IngressPath   string
+	StatusOnly    bool
 	MQTTConnected bool
 	MQTTBroker    string
 	Chargers      []chargerStatus
@@ -103,6 +104,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	data := statusPageData{
 		IngressPath:   r.Header.Get("X-Ingress-Path"),
+		StatusOnly:    s.statusOnly,
 		MQTTConnected: connected,
 		MQTTBroker:    broker,
 		Chargers:      toChargerStatus(chargers),

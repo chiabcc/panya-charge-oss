@@ -16,8 +16,8 @@
                 <div class="subtitle">Runtime status</div>
             </div>
             <div style="display:flex;gap:12px;align-items:center">
-                <a href="{{ .IngressPath }}/status" class="refresh-link">↻ Refresh</a>
-                <a href="{{ .IngressPath }}" class="status-nav-link">Config</a>
+                <a href="{{ .IngressPath }}/" class="refresh-link">↻ Refresh</a>
+                {{ if not .StatusOnly }}<a href="{{ .IngressPath }}" class="status-nav-link">Config</a>{{ end }}
             </div>
         </div>
 
