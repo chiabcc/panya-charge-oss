@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 
@@ -28,6 +29,10 @@ type Subscriber struct {
 }
 
 func NewSubscriber(broker, clientID, username, password, baseTopic string, topics map[string]string, energy *outmq.EnergyTracker, cmdHandler CommandHandler, logger *slog.Logger) (*Subscriber, error) {
+	if logger == nil {
+		return nil, fmt.Errorf("subscriber: logger must not be nil")
+	}
+
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(broker)
 	opts.SetClientID(clientID + "-sub")
@@ -37,6 +42,8 @@ func NewSubscriber(broker, clientID, username, password, baseTopic string, topic
 	}
 	opts.SetAutoReconnect(true)
 	opts.SetCleanSession(true)
+	opts.SetConnectRetry(true)
+	opts.SetConnectRetryInterval(10 * time.Second)
 
 	s := &Subscriber{
 		baseTopic:  baseTopic,
@@ -55,25 +62,10 @@ func NewSubscriber(broker, clientID, username, password, baseTopic string, topic
 	})
 
 	s.client = mqtt.NewClient(opts)
-	if token := s.client.Connect(); token.Wait() && token.Error() != nil {
-		return nil, fmt.Errorf("subscriber mqtt connect %s: %w", broker, token.Error())
-	}
-
-	if err := s.setupHandlers(); err != nil {
-		s.client.Disconnect(500)
-		return nil, err
-	}
+	_ = s.client.Connect()
 
 	logger.Info("mqtt subscriber initialized", "broker", broker)
 	return s, nil
-}
-
-func (s *Subscriber) setupHandlers() error {
-	if err := s.subscribe(s.client); err != nil {
-		return err
-	}
-	s.logger.Info("mqtt subscriber handlers set up")
-	return nil
 }
 
 func (s *Subscriber) resubscribe(c mqtt.Client) {

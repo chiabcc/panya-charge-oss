@@ -14,15 +14,20 @@ import (
 )
 
 type Publisher struct {
-	client    mqtt.Client
-	baseTopic string
-	topics    map[string]string
-	broker    string
-	connected atomic.Bool
-	logger    *slog.Logger
+	client      mqtt.Client
+	baseTopic   string
+	topics      map[string]string
+	broker      string
+	onReconnect func()
+	connected   atomic.Bool
+	logger      *slog.Logger
 }
 
 func NewPublisher(broker, clientID, username, password, baseTopic string, topics map[string]string, logger *slog.Logger) (*Publisher, error) {
+	if logger == nil {
+		return nil, fmt.Errorf("publisher: logger must not be nil")
+	}
+
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(broker)
 	opts.SetClientID(clientID)
@@ -32,6 +37,8 @@ func NewPublisher(broker, clientID, username, password, baseTopic string, topics
 	}
 	opts.SetAutoReconnect(true)
 	opts.SetCleanSession(true)
+	opts.SetConnectRetry(true)
+	opts.SetConnectRetryInterval(10 * time.Second)
 
 	p := &Publisher{
 		broker:    broker,
@@ -43,6 +50,9 @@ func NewPublisher(broker, clientID, username, password, baseTopic string, topics
 	opts.SetOnConnectHandler(func(c mqtt.Client) {
 		p.connected.Store(true)
 		p.logger.Info("mqtt connected", "broker", broker)
+		if p.onReconnect != nil {
+			p.onReconnect()
+		}
 	})
 	opts.SetConnectionLostHandler(func(c mqtt.Client, err error) {
 		p.connected.Store(false)
@@ -50,10 +60,7 @@ func NewPublisher(broker, clientID, username, password, baseTopic string, topics
 	})
 
 	p.client = mqtt.NewClient(opts)
-	if token := p.client.Connect(); token.Wait() && token.Error() != nil {
-		return nil, fmt.Errorf("mqtt connect %s: %w", broker, token.Error())
-	}
-	p.connected.Store(true)
+	_ = p.client.Connect()
 
 	logger.Info("mqtt publisher initialized", "broker", broker, "base_topic", baseTopic)
 	return p, nil
@@ -119,6 +126,12 @@ func (p *Publisher) Subscribe(topic string, handler mqtt.MessageHandler) error {
 	}
 	p.logger.Info("mqtt subscribed", "topic", fullTopic)
 	return nil
+}
+
+// SetOnReconnect sets a callback invoked each time the MQTT client connects
+// (including the initial connect and all auto-reconnects).
+func (p *Publisher) SetOnReconnect(fn func()) {
+	p.onReconnect = fn
 }
 
 func (p *Publisher) Close() {

@@ -120,6 +120,11 @@ func New(cfg config.Config) (*CSMS, error) {
 	)
 	controller.SetEmitter(emitter)
 
+	publisher.SetOnReconnect(func() {
+		publisher.PublishGlobalDiscovery()
+		publisher.PublishSmartChargingEnabled(controller.IsEnabled())
+	})
+
 	cmd := &cmdBridge{
 		commander:   commander,
 		chargerRepo: chargerRepo,
