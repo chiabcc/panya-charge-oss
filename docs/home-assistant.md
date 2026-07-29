@@ -239,12 +239,115 @@ have two options:
        entity_id: sensor.grid_power
    action:
      - service: mqtt.publish
-       data:
-         topic: "panya/energy/grid/power"
-         payload: "{{ trigger.to_state.state }}"
-   ```
+data:
+          topic: "panya/energy/grid/power"
+          payload: "{{ trigger.to_state.state | float(0) }}"
+    ```
 
 2. **Point the CSMS at your existing topics** — change the `topics.grid_power` config to match your sensor's topic. The CSMS accepts both raw numeric payloads and JSON objects with a `power` field.
+
+### Generic Template: Any Energy Integration
+
+If you're using an energy integration other than Enphase (SolarEdge, P1 meter, Shelly 3EM,
+Fronius, etc.), bridge your HA energy sensors to panya's MQTT topics using this generic
+template.
+
+### Strategy Selection
+
+| What you have | Strategy |
+|---|---|
+| Solar production + home consumption sensors | **Recommended** — most accurate, direct from inverter |
+| Grid power sensor only | Simplest setup, one sensor |
+| All three (solar + consumption + grid) | Best — catches sensor drift via cross-validation |
+
+### Option 1: Solar + Consumption (Recommended)
+
+```yaml
+- alias: "Bridge solar to panya"
+  trigger:
+    - platform: state
+      entity_id: {{ your_solar_sensor }}
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "panya/solar/power"
+        payload: "{{ states('{{ your_solar_sensor }}') | float(0) | round(0) }}"
+        retain: true
+
+- alias: "Bridge consumption to panya"
+  trigger:
+    - platform: state
+      entity_id: {{ your_consumption_sensor }}
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "panya/home/power"
+        payload: "{{ states('{{ your_consumption_sensor }}') | float(0) | round(0) }}"
+        retain: true
+```
+
+### Option 2: Grid Power Only
+
+```yaml
+- alias: "Bridge grid power to panya"
+  trigger:
+    - platform: state
+      entity_id: {{ your_grid_sensor }}
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "panya/grid/power"
+        payload: "{{ states('{{ your_grid_sensor }}') | float(0) | round(0) }}"
+        retain: true
+```
+
+### Option 3: Time-Based Trigger (Alternative)
+
+If your sensor updates at a different rate, or you prefer predictable cadence, use
+`time_pattern` to publish every 15 seconds:
+
+```yaml
+- alias: "Bridge energy to panya (time-based)"
+  trigger:
+    - platform: time_pattern
+      seconds: "/15"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "panya/solar/power"
+        payload: "{{ states('{{ your_solar_sensor }}') | float(0) | round(0) }}"
+        retain: true
+    - service: mqtt.publish
+      data:
+        topic: "panya/home/power"
+        payload: "{{ states('{{ your_consumption_sensor }}') | float(0) | round(0) }}"
+        retain: true
+```
+
+### Unavailable Entity Handling
+
+The `| float(0)` filter prevents silent failures when an entity goes "unavailable" or "unknown".
+Without it, panya's `parsePowerPayload` silently rejects the string "unavailable" — the app
+sees stale data and falls to safe state (6A). With `float(0)`, it publishes `0` instead,
+which is explicitly handled as "no surplus".
+
+### Common Entity Patterns
+
+Verify your entity IDs in **Developer Tools → States**. Common patterns:
+
+| Integration | Solar Sensor | Consumption Sensor | Grid Sensor |
+|---|---|---|---|
+| Enphase Envoy | `sensor.enphase_envoy_current_power_production` | `sensor.enphase_envoy_home_power_consumption` | `sensor.enphase_envoy_grid_power` |
+| SolarEdge | `sensor.solaredge_production_pwr` | *(none)* | `sensor.solaredge_net_energy_meter_watts` |
+| P1 Meter (DSMR) | *(none)* | *(none)* | `sensor.utility_meter_grid_power` |
+| Shelly 3EM | `sensor.shelly_em_xxx_channel_0_power` | *(varies)* | *(varies)* |
+| Fronius | `sensor.fronius_smart_meter_power_active_phase_1` | *(none)* | `sensor.fronius_smart_meter_power` |
+
+> **Note**: Entity names vary by configuration and HA version. Check your actual entities in
+> HA Developer Tools before using them in automations.
+
+See the [Enphase Envoy Integration Guide](enphase-integration.md) for a detailed Enphase
+walkthrough with additional options.
 
 ### How the Controller Responds
 

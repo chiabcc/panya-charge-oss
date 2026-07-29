@@ -4,7 +4,7 @@ This document records the nine architectural decisions for `panya-charge-oss`, t
 
 ## Project Identity
 
-**OCPP 1.6-J bridge, single static binary, no database, dual deployment paths, optional embedded WebUI disabled by default.**
+**OCPP 1.6-J bridge, single static binary, no database, dual deployment paths, optional embedded WebUI disabled by default, optional direct HA integration in add-on mode.**
 
 - **Core protocol bridge**: OCPP ↔ MQTT ↔ Home Assistant
 - **No database**: state lives in memory and persists via OCPP
@@ -25,7 +25,7 @@ This document records the nine architectural decisions for `panya-charge-oss`, t
 | 6 | UI stack | Go html/template + vendored htmx, go:embed | go build only toolchain; no Node |
 | 7 | Docs | This file + one-line patches | AGENTS.md/README identity updated |
 | 8 | Tests | TDD for logic, QA scenarios for all | Reload classifier, validation, secret masking, env flags, token gate test-driven |
-| 9 | HA add-on mode | bashio launcher → PANYA_* env vars; schema-driven; WebUI off | matches HA conventions; zero business-logic changes; standalone path unchanged |
+| 9 | HA add-on mode | bashio launcher → PANYA_* env vars; schema-driven; WebUI off | matches HA conventions; zero business-logic changes; standalone path unchanged; SUPERVISOR_TOKEN available for both MQTT broker discovery (current) and future HA entity-state reads (Phase 2 — architecture sketched, not implemented) |
 
 ## Invariants
 
@@ -43,7 +43,8 @@ This document records the nine architectural decisions for `panya-charge-oss`, t
 - Dashboard / visualization (commercial layer)
 - Node toolchain (we ship Go binaries only)
 - Config history (we provide effective values + source badges)
-- Extra API endpoints beyond OCPP/MQTT/WebUI
+- Exposing new server-side API endpoints (inbound) beyond OCPP/MQTT/WebUI
+- Consuming external APIs (outbound adapters) via domain ports — see EnergySource port (ports.go:87)
 - YAML comment preservation (we strip comments)
 - Schema migration (in-memory model only)
 - HA ingress WebUI (may revisit in v2 if hot-reload value justifies two-config-surface complexity)
