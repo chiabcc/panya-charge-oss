@@ -395,15 +395,18 @@ and payload when running at debug level.
 ## Smart Charging Architecture
 
 ```
-Grid Power MQTT  ──┐
-Solar Power MQTT  ──┼──→ EnergyTracker → Calculator → Controller → SetChargingProfile
-Consumption MQTT ───┘                              (OCPP command)
+Grid Power HA Entity       ──┐
+Solar Power HA Entity      ──┼──→ HA Adapter → Calculator → Controller → SetChargingProfile
+Consumption Power HA Entity ──┘   (polls every    (OCPP command)
+                                  10s via
+                                  Supervisor API)
 ```
 
-1. **EnergyTracker** collects grid, solar, and consumption power from MQTT
+1. **HA adapter** polls Home Assistant entities (grid, solar, consumption) every 10s via the Supervisor proxy API, keeping last-known value on error
 2. **Calculator** computes ideal current limit from surplus data
-3. **Controller** applies hysteresis, cooldown, and safety limits, then sends
-   `SetChargingProfile` via OCPP
+3. **Controller** applies hysteresis, cooldown, and safety limits, then sends `SetChargingProfile` via OCPP
+
+When no entity IDs are configured, `NoOpEnergySource` disables smart charging gracefully.
 
 ## Architecture
 

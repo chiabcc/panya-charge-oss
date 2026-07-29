@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -146,87 +145,6 @@ func (p *Publisher) IsConnected() bool {
 // Status returns the MQTT connection state and broker address.
 func (p *Publisher) Status() (connected bool, broker string) {
 	return p.connected.Load(), p.broker
-}
-
-// EnergyTracker tracks grid, solar, and consumption power readings from MQTT.
-// It implements ports.EnergySource. Each source is tracked independently with
-// per-source staleness detection.
-type EnergyTracker struct {
-	grid          atomic.Int64
-	gridAt        time.Time
-	solar         atomic.Int64
-	solarAt       time.Time
-	consumption   atomic.Int64
-	consumptionAt time.Time
-	mu            sync.RWMutex
-}
-
-func NewEnergyTracker() *EnergyTracker {
-	return &EnergyTracker{}
-}
-
-func (e *EnergyTracker) UpdateGrid(powerW float64) {
-	e.mu.Lock()
-	e.gridAt = time.Now()
-	e.mu.Unlock()
-	e.grid.Store(int64(powerW))
-}
-
-func (e *EnergyTracker) UpdateSolar(powerW float64) {
-	e.mu.Lock()
-	e.solarAt = time.Now()
-	e.mu.Unlock()
-	e.solar.Store(int64(powerW))
-}
-
-func (e *EnergyTracker) UpdateConsumption(powerW float64) {
-	e.mu.Lock()
-	e.consumptionAt = time.Now()
-	e.mu.Unlock()
-	e.consumption.Store(int64(powerW))
-}
-
-func (e *EnergyTracker) GetGridPowerW() float64 {
-	return float64(e.grid.Load())
-}
-
-func (e *EnergyTracker) GetSolarPowerW() float64 {
-	return float64(e.solar.Load())
-}
-
-func (e *EnergyTracker) GetConsumptionPowerW() float64 {
-	return float64(e.consumption.Load())
-}
-
-func (e *EnergyTracker) IsStale(threshold time.Duration) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	latest := e.gridAt
-	if e.solarAt.After(latest) {
-		latest = e.solarAt
-	}
-	if e.consumptionAt.After(latest) {
-		latest = e.consumptionAt
-	}
-	return time.Since(latest) > threshold
-}
-
-func (e *EnergyTracker) IsGridStale(threshold time.Duration) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return time.Since(e.gridAt) > threshold
-}
-
-func (e *EnergyTracker) IsSolarAvailable(threshold time.Duration) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return !e.solarAt.IsZero() && time.Since(e.solarAt) <= threshold
-}
-
-func (e *EnergyTracker) IsConsumptionAvailable(threshold time.Duration) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return !e.consumptionAt.IsZero() && time.Since(e.consumptionAt) <= threshold
 }
 
 // PublishGridPower publishes a grid power reading (W). Negative = surplus/exporting.
