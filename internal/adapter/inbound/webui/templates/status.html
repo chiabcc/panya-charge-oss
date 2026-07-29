@@ -23,8 +23,8 @@
 
         <div class="section">
             <div class="section-name">OCPP URL</div>
-            <code class="ocpp-url">ws://&lt;host&gt;:{{ .OCPPPort }}{{ .OCPPPath }}</code>
-            <div class="helper">Replace &lt;host&gt; with your HA IP address</div>
+            <code class="ocpp-url" id="ocpp-url">ws://&lt;HA-IP&gt;:{{ .OCPPPort }}/</code>
+            <div class="helper">Set this as your charger's CSMS / OCPP backend URL</div>
         </div>
 
         <div class="section">
@@ -89,6 +89,12 @@
             </div>
         </div>
     </div>
+    <script>
+        (function () {
+            var el = document.getElementById('ocpp-url');
+            if (el) el.textContent = 'ws://' + window.location.hostname + ':{{ .OCPPPort }}/';
+        })();
+    </script>
 </body>
 </html>
 {{ end }}
