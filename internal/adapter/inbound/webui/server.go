@@ -173,6 +173,7 @@ type Server struct {
 	listenAddr     string
 	token          string
 	isLoopback     bool
+	statusOnly     bool
 	template       *template.Template
 	applier        Applier
 	statusProvider StatusProvider
@@ -187,6 +188,10 @@ type loginData struct {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	if s.statusOnly {
+		http.Redirect(w, r, "/status", http.StatusFound)
+		return
+	}
 	if s.token == "" && s.isLoopback {
 		http.Redirect(w, r, "/api/config", http.StatusFound)
 		return

@@ -68,6 +68,13 @@ func (s *Server) WithStatus(provider StatusProvider, ocppPort int, ocppPath stri
 	s.mux.HandleFunc("GET /api/status", s.handleStatusJSON)
 }
 
+// WithStatusOnly marks this server as status-only (no config editor).
+// GET / redirects to /status so HA ingress lands on the status page.
+// Must be called before Start().
+func (s *Server) WithStatusOnly() {
+	s.statusOnly = true
+}
+
 func toChargerStatus(info []csms.ChargerInfo) []chargerStatus {
 	out := make([]chargerStatus, len(info))
 	for i, c := range info {

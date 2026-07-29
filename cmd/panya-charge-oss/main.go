@@ -70,6 +70,9 @@ func run(configPath string) error {
 		if cfg.WebUI.StatusEnabled {
 			srv.WithStatus(facade, cfg.Server.OCPPPort, cfg.Server.OCPPPath)
 		}
+		if cfg.WebUI.StatusEnabled && !cfg.WebUI.Enabled {
+			srv.WithStatusOnly()
+		}
 		go func() {
 			slog.Info("starting webui", "listen", cfg.WebUI.Listen, "config_enabled", cfg.WebUI.Enabled, "status_enabled", cfg.WebUI.StatusEnabled)
 			if err := srv.Start(ctx); err != nil {
