@@ -45,6 +45,25 @@ panya subscribes to.
 All topics are prefixed with `mqtt.base_topic` (default `panya`), so the full
 path is e.g. `panya/grid/power`.
 
+### Unit Handling (Watts vs Kilowatts)
+
+panya expects **watts** in the MQTT payload. Most HA energy integrations report in watts
+by default, but some use kilowatts. Check your entity's `unit_of_measurement` attribute in
+**Developer Tools → States**:
+
+- **`unit_of_measurement: W`** — pass through directly:
+  ```yaml
+  payload: "{{ states('sensor.your_entity') | float(0) | round(0) }}"
+  ```
+- **`unit_of_measurement: kW`** — multiply by 1000:
+  ```yaml
+  payload: "{{ (states('sensor.your_entity') | float(0) * 1000) | round(0) }}"
+  ```
+
+When in doubt, publish the value and check panya logs: `DEBUG solar power updated watts=X`
+— if `X` is in the hundreds/thousands range, it's correct. If it's in the single-digit
+hundreds, you're likely dividing or multiplying by the wrong factor.
+
 ---
 
 ## Strategies at a Glance
@@ -80,6 +99,20 @@ mqtt:
     consumption_power: "home/power"           # Envoy consumption
 ```
 
+#### HA Add-on Configuration
+
+If you're running panya as a Home Assistant add-on, configure these fields in the
+add-on's Configuration tab instead of `config.yaml`:
+
+| Add-on Field | Value |
+|---|---|
+| `grid_power_topic` | `grid/power` |
+| `solar_power_topic` | `solar/power` |
+| `consumption_power_topic` | `home/power` |
+
+The add-on translates these to the same MQTT topics. The `base_topic` (default `panya`)
+is still configured in the add-on settings.
+
 ### HA Automations
 
 Create two automations to republish Envoy sensors onto panya's topics.
@@ -94,7 +127,7 @@ Create two automations to republish Envoy sensors onto panya's topics.
     - service: mqtt.publish
       data:
         topic: "panya/solar/power"
-        payload: "{{ trigger.to_state.state }}"
+        payload: "{{ trigger.to_state.state | float(0) }}"
 
 # Republish Envoy home consumption
 - alias: "Bridge Envoy consumption to panya"
@@ -105,8 +138,14 @@ Create two automations to republish Envoy sensors onto panya's topics.
     - service: mqtt.publish
       data:
         topic: "panya/home/power"
-        payload: "{{ trigger.to_state.state }}"
+        payload: "{{ trigger.to_state.state | float(0) }}"
 ```
+
+> **`float(0)` guard**: The `| float(0)` filter prevents silent failures when an
+> entity goes "unavailable" or "unknown". Without it, panya's `parsePowerPayload`
+> silently rejects the string "unavailable" — the app sees stale data and falls to
+> safe state (6A). With `float(0)`, it publishes `0` instead, which is explicitly
+> handled as "no surplus" — the charger falls to minimum but doesn't see stale data.
 
 > **Entity IDs vary** by Envoy model and firmware. Open
 > **Settings → Devices & Services → Enphase Envoy** in HA to find your actual
@@ -114,6 +153,33 @@ Create two automations to republish Envoy sensors onto panya's topics.
 > - `sensor.envoy_<serial>_current_power_production`
 > - `sensor.envoy_<serial>_home_power_consumption`
 > - `sensor.enphase_envoy_current_power_production`
+
+#### Time-Based Trigger (Alternative)
+
+The above automations use a `state` trigger — they fire whenever an entity value changes.
+This works well for Enphase (entities update every 30-60s). If you prefer a predictable
+cadence, or if your sensor updates at a different rate, use a `time_pattern` trigger:
+
+```yaml
+- alias: "Bridge Enphase energy to panya (time-based)"
+  trigger:
+    - platform: time_pattern
+      seconds: "/15"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "panya/solar/power"
+        payload: "{{ states('sensor.enphase_envoy_current_power_production') | float(0) | round(0) }}"
+        retain: true
+    - service: mqtt.publish
+      data:
+        topic: "panya/home/power"
+        payload: "{{ states('sensor.enphase_envoy_home_power_consumption') | float(0) | round(0) }}"
+        retain: true
+```
+
+This publishes all energy values every 15 seconds — between panya's 10-second poll
+interval and its 60-second staleness threshold. One automation handles everything.
 
 ### Grid Power Source
 
@@ -130,16 +196,32 @@ For `grid_power` (used for cross-validation), pick one:
      action:
        - service: mqtt.publish
          data:
-           topic: "panya/grid/power"
-           payload: >
-             {{ (states('sensor.enphase_envoy_home_power_consumption') | float
-                 - states('sensor.enphase_envoy_current_power_production') | float)
-                 | round(1) }}
-   ```
+            topic: "panya/grid/power"
+            payload: >
+              {{ (states('sensor.enphase_envoy_home_power_consumption') | float(0)
+                  - states('sensor.enphase_envoy_current_power_production') | float(0))
+                  | round(1) }}
+    ```
    - Positive = importing, negative = exporting — matches panya's convention.
 
 2. **Leave empty** — panya skips cross-validation and uses solar−consumption
    directly. Works fine, you just lose the drift check.
+
+### MQTT Retain
+
+Set `retain: true` in your `mqtt.publish` actions. This ensures panya sees the
+last-known energy value immediately on reconnect (e.g., after a broker restart or panya
+restart), so the controller doesn't see stale data during the gap. The 60-second
+staleness threshold still applies — if the automation stops publishing, panya falls to
+safe state regardless.
+
+Add to your automation actions:
+```yaml
+data:
+  topic: "panya/solar/power"
+  payload: "{{ ... }}"
+  retain: true  # ← add this
+```
 
 ---
 
@@ -160,6 +242,18 @@ mqtt:
     # Leave solar_power and consumption_power empty
 ```
 
+#### HA Add-on Configuration
+
+If you're running panya as a Home Assistant add-on, configure this field in the
+add-on's Configuration tab instead of `config.yaml`:
+
+| Add-on Field | Value |
+|---|---|
+| `grid_power_topic` | `grid/power` |
+
+Leave `solar_power_topic` and `consumption_power_topic` empty to match Option B.
+The `base_topic` (default `panya`) is still configured in the add-on settings.
+
 ### HA Automation
 
 ```yaml
@@ -171,7 +265,7 @@ mqtt:
     - service: mqtt.publish
       data:
         topic: "panya/grid/power"
-        payload: "{{ trigger.to_state.state }}"
+        payload: "{{ trigger.to_state.state | float(0) }}"
 ```
 
 ### Sign Convention Check (Critical)
@@ -191,8 +285,17 @@ DEBUG grid power updated watts=-2300    ← correct (exporting surplus)
 If you see positive watts during surplus, flip the sign in the automation:
 
 ```yaml
-payload: "{{ (trigger.to_state.state | float * -1) | round(1) }}"
+payload: "{{ (trigger.to_state.state | float(0) * -1) | round(1) }}"
 ```
+
+If your Enphase setup exposes a "Current net power consumption" entity (rather than a
+dedicated "Grid Power" entity), note that some Enphase firmware versions expose this as
+an always-positive value (import only) with a separate export entity. To verify:
+
+**During midday surplus** (solar producing more than home is consuming):
+- If "Current net power consumption" shows a **NEGATIVE** value (e.g., `-1.2`) → correct, proceed
+- If it shows `0` or a **positive** value → your integration doesn't support signed net power
+- If you see a separate "net energy production" entity → use Option A instead (solar + consumption)
 
 ---
 
@@ -384,7 +487,7 @@ charging:
 Grid sign is flipped. Multiply by `-1` in your automation:
 
 ```yaml
-payload: "{{ (trigger.to_state.state | float * -1) | round(1) }}"
+payload: "{{ (trigger.to_state.state | float(0) * -1) | round(1) }}"
 ```
 
 ### Charging current jumps around rapidly
