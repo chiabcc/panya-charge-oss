@@ -189,7 +189,7 @@ type loginData struct {
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if s.statusOnly {
-		http.Redirect(w, r, "/status", http.StatusFound)
+		http.Redirect(w, r, r.Header.Get("X-Ingress-Path")+"/status", http.StatusFound)
 		return
 	}
 	if s.token == "" && s.isLoopback {
