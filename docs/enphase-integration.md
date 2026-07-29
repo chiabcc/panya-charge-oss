@@ -9,7 +9,42 @@ base setup (MQTT broker, charger wiring, discovery).
 
 ---
 
-## How the Data Flows
+## Native HA Entity Reader (Add-on Only)
+
+**If you are running the Panya Charge OSS add-on, you do not need any MQTT
+bridge automations.** The add-on reads Enphase entity states directly from
+Home Assistant's Services API and publishes them to the internal smart charging
+controller without going through the MQTT broker.
+
+To enable this mode in the add-on Configuration tab:
+
+1. Set `solar_power_topic` to your Enphase production entity ID
+   (e.g. `sensor.enphase_envoy_current_power_production`)
+2. Set `consumption_power_topic` to your Enphase consumption entity ID
+   (e.g. `sensor.enphase_envoy_home_power_consumption`)
+3. (Optional) Set `grid_power_topic` to your grid power entity ID or leave
+   empty to compute it from solar minus consumption
+
+The add-on polls these entities automatically and feeds the values into the
+smart charging calculator. No automations, no MQTT publishing, no extra
+configuration needed.
+
+> **Entity IDs vary** by Envoy model and firmware. Open
+> **Settings → Devices & Services → Enphase Envoy** in HA to find your actual
+> entity IDs. Common names include:
+> - `sensor.envoy_<serial>_current_power_production`
+> - `sensor.envoy_<serial>_home_power_consumption`
+> - `sensor.enphase_envoy_current_power_production`
+
+---
+
+## Legacy: MQTT Automation Bridge (Deprecated)
+
+> **This approach is deprecated.** If you use the HA add-on, use the native
+> entity reader above instead. This section is preserved for users who run
+> panya-charge-oss in standalone mode or need a custom setup.
+
+### How the Data Flows (Legacy)
 
 ```
 Enphase Envoy ──local API──→ HA Enphase integration ──→ HA sensor
@@ -29,7 +64,10 @@ panya subscribes to.
 
 ---
 
-## What panya Subscribes To
+## What panya Subscribes To (Standalone Mode)
+
+> **Add-on users:** skip this table. Configure entity IDs directly in the
+> add-on's Configuration tab using the native entity reader described above.
 
 | Config key | Default topic | Required? | Payload |
 |---|---|---|---|
@@ -63,7 +101,10 @@ when `|solar − consumption + grid| > 500 W`, indicating sensor drift.
 
 ---
 
-## Option A: Solar + Consumption (Recommended)
+## Option A: Solar + Consumption (Standalone Mode)
+
+> **Add-on users:** skip this section. Configure your entity IDs in the native
+> entity reader instead.
 
 Uses Envoy's two most reliable readings directly. Works for any Envoy model
 that exposes production and consumption sensors (Envoy-S metered, IQ Gateway).
@@ -143,7 +184,10 @@ For `grid_power` (used for cross-validation), pick one:
 
 ---
 
-## Option B: Grid-Only (CT Clamps at Grid Point)
+## Option B: Grid-Only (CT Clamps at Grid Point) — Legacy
+
+> **Add-on users:** skip this section. The native entity reader supports a
+> single grid power entity; set `grid_power_topic` and leave the others empty.
 
 If your Envoy has CT clamps installed at the main service panel (common on
 Envoy-S Metered), the grid reading alone is sufficient. Simpler setup, one
@@ -196,11 +240,11 @@ payload: "{{ (trigger.to_state.state | float * -1) | round(1) }}"
 
 ---
 
-## Option C: Point panya at Existing HA MQTT Topics
+## Option C: Point panya at Existing HA MQTT Topics (Standalone Only)
 
 If you already publish Envoy data to MQTT (via Node-RED, AppDaemon, or another
 integration), skip the bridge automation entirely and point panya at those
-topics.
+topics. **Add-on users should use the native entity reader instead.**
 
 ### Config
 

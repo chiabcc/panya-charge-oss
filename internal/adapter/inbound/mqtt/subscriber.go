@@ -1,7 +1,6 @@
 package mqtt
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -9,8 +8,6 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-
-	outmq "github.com/chiabcc/panya-charge-oss/internal/adapter/outbound/mqtt"
 )
 
 type CommandHandler interface {
@@ -23,12 +20,11 @@ type Subscriber struct {
 	client     mqtt.Client
 	baseTopic  string
 	topics     map[string]string
-	energy     *outmq.EnergyTracker
 	cmdHandler CommandHandler
 	logger     *slog.Logger
 }
 
-func NewSubscriber(broker, clientID, username, password, baseTopic string, topics map[string]string, energy *outmq.EnergyTracker, cmdHandler CommandHandler, logger *slog.Logger) (*Subscriber, error) {
+func NewSubscriber(broker, clientID, username, password, baseTopic string, topics map[string]string, cmdHandler CommandHandler, logger *slog.Logger) (*Subscriber, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("subscriber: logger must not be nil")
 	}
@@ -48,7 +44,6 @@ func NewSubscriber(broker, clientID, username, password, baseTopic string, topic
 	s := &Subscriber{
 		baseTopic:  baseTopic,
 		topics:     topics,
-		energy:     energy,
 		cmdHandler: cmdHandler,
 		logger:     logger,
 	}
@@ -77,25 +72,11 @@ func (s *Subscriber) subscribe(c mqtt.Client) error {
 		topic   string
 		handler mqtt.MessageHandler
 	}{
-		{s.fullTopic(s.topics["grid_power"]), s.handleGridPower},
 		{s.fullTopic(s.topics["command_set_amps"]), s.handleSetAmpsGlobal},
 		{s.fullTopic(s.topics["command_state"]), s.handleSetStateGlobal},
 		{s.fullTopic(s.topics["smart_charging_command"]), s.handleSmartChargingCommand},
 		{s.baseTopic + "/charge/+/command/set_amps", s.handleSetAmpsPerCharger},
 		{s.baseTopic + "/charge/+/command/state", s.handleSetStatePerCharger},
-	}
-
-	if solarTopic := s.topics["solar_power"]; solarTopic != "" {
-		subs = append(subs, struct {
-			topic   string
-			handler mqtt.MessageHandler
-		}{s.fullTopic(solarTopic), s.handleSolarPower})
-	}
-	if consumptionTopic := s.topics["consumption_power"]; consumptionTopic != "" {
-		subs = append(subs, struct {
-			topic   string
-			handler mqtt.MessageHandler
-		}{s.fullTopic(consumptionTopic), s.handleConsumptionPower})
 	}
 
 	for _, sub := range subs {
@@ -109,50 +90,6 @@ func (s *Subscriber) subscribe(c mqtt.Client) error {
 
 func (s *Subscriber) fullTopic(suffix string) string {
 	return fmt.Sprintf("%s/%s", s.baseTopic, suffix)
-}
-
-func (s *Subscriber) handleGridPower(_ mqtt.Client, msg mqtt.Message) {
-	val, err := parsePowerPayload(msg.Payload())
-	if err != nil {
-		s.logger.Debug("ignoring non-numeric grid power payload", "payload", string(msg.Payload()), "err", err)
-		return
-	}
-	s.energy.UpdateGrid(val)
-	s.logger.Debug("grid power updated", "watts", val)
-}
-
-func (s *Subscriber) handleSolarPower(_ mqtt.Client, msg mqtt.Message) {
-	val, err := parsePowerPayload(msg.Payload())
-	if err != nil {
-		s.logger.Debug("ignoring non-numeric solar power payload", "payload", string(msg.Payload()), "err", err)
-		return
-	}
-	s.energy.UpdateSolar(val)
-	s.logger.Debug("solar power updated", "watts", val)
-}
-
-func (s *Subscriber) handleConsumptionPower(_ mqtt.Client, msg mqtt.Message) {
-	val, err := parsePowerPayload(msg.Payload())
-	if err != nil {
-		s.logger.Debug("ignoring non-numeric consumption power payload", "payload", string(msg.Payload()), "err", err)
-		return
-	}
-	s.energy.UpdateConsumption(val)
-	s.logger.Debug("consumption power updated", "watts", val)
-}
-
-func parsePowerPayload(payload []byte) (float64, error) {
-	val, err := strconv.ParseFloat(string(payload), 64)
-	if err != nil {
-		var obj map[string]any
-		if jsonErr := json.Unmarshal(payload, &obj); jsonErr == nil {
-			if v, ok := obj["power"].(float64); ok {
-				return v, nil
-			}
-		}
-		return 0, err
-	}
-	return val, nil
 }
 
 func (s *Subscriber) handleSetAmpsGlobal(_ mqtt.Client, msg mqtt.Message) {

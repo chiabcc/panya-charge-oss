@@ -103,6 +103,21 @@ type EnergySource interface {
 	IsConsumptionAvailable(threshold time.Duration) bool
 }
 
+// NoOpEnergySource implements EnergySource with always-stale, always-zero values.
+// Used as the zero-value default so the smart charging controller can consume
+// an EnergySource without a nil check before a real adapter is wired up.
+type NoOpEnergySource struct{}
+
+var _ EnergySource = (*NoOpEnergySource)(nil)
+
+func (NoOpEnergySource) GetGridPowerW() float64          { return 0 }
+func (NoOpEnergySource) GetSolarPowerW() float64         { return 0 }
+func (NoOpEnergySource) GetConsumptionPowerW() float64   { return 0 }
+func (NoOpEnergySource) IsStale(time.Duration) bool      { return true }
+func (NoOpEnergySource) IsGridStale(time.Duration) bool  { return true }
+func (NoOpEnergySource) IsSolarAvailable(time.Duration) bool { return false }
+func (NoOpEnergySource) IsConsumptionAvailable(time.Duration) bool { return false }
+
 // ChargerCommander sends OCPP commands to a charger.
 // The OCPP adapter implements this.
 type ChargerCommander interface {

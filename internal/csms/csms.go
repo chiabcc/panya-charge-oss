@@ -11,6 +11,7 @@ import (
 	"time"
 
 	inmqtt "github.com/chiabcc/panya-charge-oss/internal/adapter/inbound/mqtt"
+	iha "github.com/chiabcc/panya-charge-oss/internal/adapter/inbound/ha"
 	outmqtt "github.com/chiabcc/panya-charge-oss/internal/adapter/outbound/mqtt"
 	"github.com/chiabcc/panya-charge-oss/internal/adapter/outbound/ocpp"
 	"github.com/chiabcc/panya-charge-oss/internal/config"
@@ -39,7 +40,7 @@ type CSMS struct {
 	commander  *ocpp.Commander
 	publisher  *outmqtt.Publisher
 	subscriber *inmqtt.Subscriber
-	energy     *outmqtt.EnergyTracker
+	energy     ports.EnergySource
 
 	cancelFn context.CancelFunc
 	wg       sync.WaitGroup
@@ -53,6 +54,7 @@ func New(cfg config.Config) (*CSMS, error) {
 	levelVar.Set(parseLogLevel(cfg.Server.LogLevel))
 
 	logger := buildLogger(levelVar, cfg.Server.LogFormat)
+	cfg.CheckDeprecatedEnergyTopics(logger)
 
 	chargerRepo := ports.NewInMemoryChargerRepository()
 	sessionRepo := ports.NewInMemorySessionRepository()
@@ -61,7 +63,18 @@ func New(cfg config.Config) (*CSMS, error) {
 
 	emitter := pkgcsms.NewEmitter(0, logger)
 
-	energy := outmqtt.NewEnergyTracker()
+	var energy ports.EnergySource
+	if cfg.Energy.HASS.GridEntityID != "" || cfg.Energy.HASS.SolarEntityID != "" || cfg.Energy.HASS.ConsumptionEntityID != "" {
+		hassCfg := iha.HASSConfig{
+			GridEntityID:        cfg.Energy.HASS.GridEntityID,
+			SolarEntityID:       cfg.Energy.HASS.SolarEntityID,
+			ConsumptionEntityID: cfg.Energy.HASS.ConsumptionEntityID,
+			Token:               cfg.Energy.HASS.Token,
+		}
+		energy = iha.NewEnergySource(hassCfg, "http://supervisor/core/api", cfg.Energy.HASS.Token, logger)
+	} else {
+		energy = ports.NoOpEnergySource{}
+	}
 
 	publisher, err := outmqtt.NewPublisher(
 		cfg.MQTT.Broker, cfg.MQTT.ClientID,
@@ -138,7 +151,7 @@ func New(cfg config.Config) (*CSMS, error) {
 		cfg.MQTT.Broker, cfg.MQTT.ClientID,
 		cfg.MQTT.Username, cfg.MQTT.Password,
 		cfg.MQTT.BaseTopic, cfg.MQTT.Topics,
-		energy, cmd, logger,
+		cmd, logger,
 	)
 	if err != nil {
 		publisher.Close()
@@ -190,6 +203,9 @@ func (c *CSMS) Start(ctx context.Context) error {
 func (c *CSMS) Stop() {
 	if c.cancelFn != nil {
 		c.cancelFn()
+	}
+	if hs, ok := c.energy.(*iha.EnergySource); ok {
+		hs.Stop()
 	}
 	c.server.Stop()
 	if c.subscriber != nil {

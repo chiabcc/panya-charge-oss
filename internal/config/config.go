@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
@@ -13,10 +14,22 @@ import (
 
 // Config holds all application configuration loaded from config.yaml and env vars.
 type Config struct {
-	Server   ServerConfig `yaml:"server"`
-	MQTT     MQTTConfig   `yaml:"mqtt"`
+	Server   ServerConfig   `yaml:"server"`
+	MQTT     MQTTConfig     `yaml:"mqtt"`
 	Charging ChargingConfig `yaml:"charging"`
-	WebUI    WebUIConfig  `yaml:"webui"`
+	WebUI    WebUIConfig    `yaml:"webui"`
+	Energy   EnergyConfig   `yaml:"energy"`
+}
+
+type EnergyConfig struct {
+	HASS HASSConfig `yaml:"hass"`
+}
+
+type HASSConfig struct {
+	GridEntityID        string `yaml:"grid_entity_id"`
+	SolarEntityID       string `yaml:"solar_entity_id"`
+	ConsumptionEntityID string `yaml:"consumption_entity_id"`
+	Token               string `yaml:"-"` // env only, never in YAML
 }
 
 type ServerConfig struct {
@@ -131,6 +144,10 @@ func applyEnvOverrides(cfg *Config) {
 		"PANYA_SERVER_LOG_FORMAT":     &cfg.Server.LogFormat,
 		"PANYA_WEBUI_LISTEN":          &cfg.WebUI.Listen,
 		"PANYA_WEBUI_TOKEN":           &cfg.WebUI.Token,
+		"PANYA_ENERGY_HASS_GRID_ENTITY_ID":       &cfg.Energy.HASS.GridEntityID,
+		"PANYA_ENERGY_HASS_SOLAR_ENTITY_ID":      &cfg.Energy.HASS.SolarEntityID,
+		"PANYA_ENERGY_HASS_CONSUMPTION_ENTITY_ID": &cfg.Energy.HASS.ConsumptionEntityID,
+		"PANYA_HASS_TOKEN":                       &cfg.Energy.HASS.Token,
 	}
 	for env, ptr := range strOverrides {
 		if val := os.Getenv(env); val != "" {
@@ -230,4 +247,16 @@ func (c *Config) LogLevelUpper() string {
 // persisting.
 func Validate(cfg *Config) error {
 	return cfg.validate()
+}
+
+// CheckDeprecatedEnergyTopics logs a warning when legacy MQTT energy topics
+// are configured but no Home Assistant entity IDs are set. The mqtt.topics
+// approach for grid/solar/consumption power is deprecated in favor of direct
+// HA sensor entity IDs.
+func (c *Config) CheckDeprecatedEnergyTopics(logger *slog.Logger) {
+	gridTopic := c.MQTT.Topics["grid_power"]
+	if gridTopic != "" && c.Energy.HASS.GridEntityID == "" &&
+		c.Energy.HASS.SolarEntityID == "" && c.Energy.HASS.ConsumptionEntityID == "" {
+		logger.Warn("mqtt energy topics are deprecated — configure energy.hass.* entity IDs instead")
+	}
 }

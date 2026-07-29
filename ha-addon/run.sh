@@ -94,4 +94,12 @@ else
     fi
 fi
 
+# Energy entity IDs (native HA entity reader)
+export PANYA_ENERGY_HASS_GRID_ENTITY_ID="${grid_entity_id:-}"
+export PANYA_ENERGY_HASS_SOLAR_ENTITY_ID="${solar_entity_id:-}"
+export PANYA_ENERGY_HASS_CONSUMPTION_ENTITY_ID="${consumption_entity_id:-}"
+
+# Supervisor token for HA API calls
+export PANYA_HASS_TOKEN="${SUPERVISOR_TOKEN:-}"
+
 exec /usr/local/bin/panya-charge-oss -config ""

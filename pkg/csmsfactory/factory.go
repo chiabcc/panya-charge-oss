@@ -12,6 +12,7 @@ type Config struct {
 	Server   ServerConfig
 	MQTT     MQTTConfig
 	Charging ChargingConfig
+	Energy   config.EnergyConfig
 }
 
 type ServerConfig struct {
@@ -101,6 +102,7 @@ func New(cfg Config) (csms.Facade, error) {
 			ContactorCooldownSec: cfg.Charging.ContactorCooldownSec,
 			DefaultAmps:          cfg.Charging.DefaultAmps,
 		},
+		Energy: cfg.Energy,
 	}
 
 	return internalcsms.New(internalCfg)
