@@ -89,6 +89,23 @@
                 </div>
             </div>
         </div>
+
+        <div class="section">
+            <div class="section-name">MQTT Input Topics</div>
+            <div class="helper" style="margin-bottom:8px">Publish sensor values (in watts) to these topics:</div>
+            <div class="topic-row">
+                <span class="topic-label">Grid Power</span>
+                <code class="topic-value">{{ .InputTopics.GridPower }}</code>
+            </div>
+            <div class="topic-row">
+                <span class="topic-label">Solar Power</span>
+                {{ if .InputTopics.SolarPower }}<code class="topic-value">{{ .InputTopics.SolarPower }}</code>{{ else }}<span class="topic-empty">not configured</span>{{ end }}
+            </div>
+            <div class="topic-row">
+                <span class="topic-label">Consumption</span>
+                {{ if .InputTopics.ConsumptionPower }}<code class="topic-value">{{ .InputTopics.ConsumptionPower }}</code>{{ else }}<span class="topic-empty">not configured</span>{{ end }}
+            </div>
+        </div>
     </div>
     <script>
         (function () {

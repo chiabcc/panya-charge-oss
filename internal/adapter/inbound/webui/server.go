@@ -177,6 +177,7 @@ type Server struct {
 	template       *template.Template
 	applier        Applier
 	statusProvider StatusProvider
+	inputTopics    inputTopics
 	ocppPort       int
 	ocppPath       string
 	mu             sync.Mutex

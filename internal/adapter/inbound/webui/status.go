@@ -17,6 +17,12 @@ type StatusProvider interface {
 	ChargingState() csms.ChargingState
 }
 
+type inputTopics struct {
+	GridPower        string
+	SolarPower       string
+	ConsumptionPower string
+}
+
 type statusPageData struct {
 	IngressPath   string
 	StatusOnly    bool
@@ -26,6 +32,7 @@ type statusPageData struct {
 	Charging      csms.ChargingState
 	OCPPPort      int
 	OCPPPath      string
+	InputTopics   inputTopics
 }
 
 type statusResponse struct {
@@ -76,6 +83,15 @@ func (s *Server) WithStatusOnly() {
 	s.statusOnly = true
 }
 
+// SetInputTopics sets the MQTT input topic paths shown on the status page.
+func (s *Server) SetInputTopics(grid, solar, consumption string) {
+	s.inputTopics = inputTopics{
+		GridPower:        grid,
+		SolarPower:       solar,
+		ConsumptionPower: consumption,
+	}
+}
+
 func toChargerStatus(info []csms.ChargerInfo) []chargerStatus {
 	out := make([]chargerStatus, len(info))
 	for i, c := range info {
@@ -111,6 +127,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Charging:      state,
 		OCPPPort:      s.ocppPort,
 		OCPPPath:      s.ocppPath,
+		InputTopics:   s.inputTopics,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

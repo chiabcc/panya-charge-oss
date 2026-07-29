@@ -69,6 +69,17 @@ func run(configPath string) error {
 		srv := webui.NewServer(configPath, cfg.WebUI.Listen, cfg.WebUI.Token, isLoopback, applier)
 		if cfg.WebUI.StatusEnabled {
 			srv.WithStatus(facade, cfg.Server.OCPPPort, cfg.Server.OCPPPath)
+			baseTopic := cfg.MQTT.BaseTopic
+			gridT := cfg.MQTT.BaseTopic + "/" + cfg.MQTT.Topics["grid_power"]
+			solarT := ""
+			if t := cfg.MQTT.Topics["solar_power"]; t != "" {
+				solarT = baseTopic + "/" + t
+			}
+			consumptionT := ""
+			if t := cfg.MQTT.Topics["consumption_power"]; t != "" {
+				consumptionT = baseTopic + "/" + t
+			}
+			srv.SetInputTopics(gridT, solarT, consumptionT)
 		}
 		if cfg.WebUI.StatusEnabled && !cfg.WebUI.Enabled {
 			srv.WithStatusOnly()

@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.1.15
+## 0.1.17
+
+- Show MQTT input topics (grid/solar/consumption) on status page so users know where to publish sensor data
+
+## 0.1.16
+
+- Add brand icon (Panya Charge logo) for HA sidebar and add-on store
+- Set maintainer: Chiab Code Code
+- Add changelog visible in HA update dialog and Documentation tab
+- Add green lightning favicon to status page
 
 - Show real HA IP in OCPP URL on status page (auto-detected via browser)
 - Remove `{ws}` wildcard from OCPP URL display
