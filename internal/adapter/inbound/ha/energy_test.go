@@ -27,7 +27,7 @@ func TestPoll_SuccessfulResponse(t *testing.T) {
 
 	ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
 		hitCount.Add(1)
-		w.Write(newEntityState("2779"))
+		_, _ = w.Write(newEntityState("2779"))
 	})
 
 	es := NewEnergySource(
@@ -71,7 +71,7 @@ func TestPoll_EntityNotFound_404(t *testing.T) {
 	ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
 		n := callCount.Add(1)
 		if n == 1 {
-			w.Write(newEntityState("1000"))
+			_, _ = w.Write(newEntityState("1000"))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -170,7 +170,7 @@ func TestPoll_HARestarting_503(t *testing.T) {
 func TestPoll_Timeout(t *testing.T) {
 	ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(10 * time.Second)
-		w.Write(newEntityState("9999"))
+		_, _ = w.Write(newEntityState("9999"))
 	})
 
 	es := NewEnergySource(
@@ -197,7 +197,7 @@ func TestPoll_Timeout(t *testing.T) {
 
 func TestPoll_UnavailableState(t *testing.T) {
 	ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Write(newEntityState("unavailable"))
+		_, _ = w.Write(newEntityState("unavailable"))
 	})
 
 	es := NewEnergySource(
@@ -224,7 +224,7 @@ func TestPoll_UnavailableState(t *testing.T) {
 
 func TestPoll_NonNumericState(t *testing.T) {
 	ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Write(newEntityState("on"))
+		_, _ = w.Write(newEntityState("on"))
 	})
 
 	es := NewEnergySource(
@@ -276,7 +276,7 @@ func TestStaleness_InitialState(t *testing.T) {
 
 func TestStop_CancelsPoller(t *testing.T) {
 	ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Write(newEntityState("42"))
+		_, _ = w.Write(newEntityState("42"))
 	})
 
 	es := NewEnergySource(
@@ -313,7 +313,7 @@ func TestStop_CancelsPoller(t *testing.T) {
 
 func TestConcurrentAccess(t *testing.T) {
 	ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Write(newEntityState("1000"))
+		_, _ = w.Write(newEntityState("1000"))
 	})
 
 	es := NewEnergySource(
