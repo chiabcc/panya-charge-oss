@@ -3,6 +3,7 @@ set -euo pipefail
 
 export PANYA_WEBUI_ENABLED=false
 export PANYA_WEBUI_STATUS_ENABLED=true
+export PANYA_WEBUI_LISTEN=0.0.0.0:8888
 
 OPTIONS="/data/options.json"
 SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN:-}"
