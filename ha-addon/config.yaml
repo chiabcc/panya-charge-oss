@@ -17,6 +17,8 @@ ports_description:
 host_network: false
 ingress: true
 ingress_port: 8888
+icon: true
+logo: true
 services:
   - mqtt:need
 options:
