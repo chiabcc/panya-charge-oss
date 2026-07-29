@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.18
+
+- Native HA entity reader: read solar/grid/consumption entities directly via Supervisor API
+- MQTT energy input deprecated in favor of native HA entity reading
+
 ## 0.1.17
 
 - Show MQTT input topics (grid/solar/consumption) on status page so users know where to publish sensor data

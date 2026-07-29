@@ -91,20 +91,23 @@
         </div>
 
         <div class="section">
-            <div class="section-name">MQTT Input Topics</div>
-            <div class="helper" style="margin-bottom:8px">Publish sensor values (in watts) to these topics:</div>
+            <div class="section-name">Energy Sources</div>
+            {{ if or .EntityIDs.GridEntityID .EntityIDs.SolarEntityID .EntityIDs.ConsumptionEntityID }}
             <div class="topic-row">
                 <span class="topic-label">Grid Power</span>
-                <code class="topic-value">{{ .InputTopics.GridPower }}</code>
+                {{ if .EntityIDs.GridEntityID }}<code class="topic-value">{{ .EntityIDs.GridEntityID }}</code>{{ else }}<span class="topic-empty">—</span>{{ end }}
             </div>
             <div class="topic-row">
                 <span class="topic-label">Solar Power</span>
-                {{ if .InputTopics.SolarPower }}<code class="topic-value">{{ .InputTopics.SolarPower }}</code>{{ else }}<span class="topic-empty">not configured</span>{{ end }}
+                {{ if .EntityIDs.SolarEntityID }}<code class="topic-value">{{ .EntityIDs.SolarEntityID }}</code>{{ else }}<span class="topic-empty">—</span>{{ end }}
             </div>
             <div class="topic-row">
                 <span class="topic-label">Consumption</span>
-                {{ if .InputTopics.ConsumptionPower }}<code class="topic-value">{{ .InputTopics.ConsumptionPower }}</code>{{ else }}<span class="topic-empty">not configured</span>{{ end }}
+                {{ if .EntityIDs.ConsumptionEntityID }}<code class="topic-value">{{ .EntityIDs.ConsumptionEntityID }}</code>{{ else }}<span class="topic-empty">—</span>{{ end }}
             </div>
+            {{ else }}
+            <div class="status-empty" style="margin-top:8px">Smart Charging: Disabled (no energy source)</div>
+            {{ end }}
         </div>
     </div>
     <script>

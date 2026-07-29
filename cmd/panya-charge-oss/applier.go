@@ -94,5 +94,6 @@ func buildFacade(cfg *config.Config) (csms.Facade, error) {
 			ContactorCooldownSec: cfg.Charging.ContactorCooldownSec,
 			DefaultAmps:          cfg.Charging.DefaultAmps,
 		},
+		Energy: cfg.Energy,
 	})
 }

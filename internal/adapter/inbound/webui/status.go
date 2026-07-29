@@ -17,10 +17,10 @@ type StatusProvider interface {
 	ChargingState() csms.ChargingState
 }
 
-type inputTopics struct {
-	GridPower        string
-	SolarPower       string
-	ConsumptionPower string
+type entityIDs struct {
+	GridEntityID        string
+	SolarEntityID       string
+	ConsumptionEntityID string
 }
 
 type statusPageData struct {
@@ -32,7 +32,7 @@ type statusPageData struct {
 	Charging      csms.ChargingState
 	OCPPPort      int
 	OCPPPath      string
-	InputTopics   inputTopics
+	EntityIDs     entityIDs
 }
 
 type statusResponse struct {
@@ -83,12 +83,12 @@ func (s *Server) WithStatusOnly() {
 	s.statusOnly = true
 }
 
-// SetInputTopics sets the MQTT input topic paths shown on the status page.
-func (s *Server) SetInputTopics(grid, solar, consumption string) {
-	s.inputTopics = inputTopics{
-		GridPower:        grid,
-		SolarPower:       solar,
-		ConsumptionPower: consumption,
+// SetEntityIDs sets the Home Assistant entity IDs shown on the status page.
+func (s *Server) SetEntityIDs(grid, solar, consumption string) {
+	s.entityIDs = entityIDs{
+		GridEntityID:        grid,
+		SolarEntityID:       solar,
+		ConsumptionEntityID: consumption,
 	}
 }
 
@@ -127,7 +127,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Charging:      state,
 		OCPPPort:      s.ocppPort,
 		OCPPPath:      s.ocppPath,
-		InputTopics:   s.inputTopics,
+		EntityIDs:     s.entityIDs,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
