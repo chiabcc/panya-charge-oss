@@ -9,20 +9,19 @@ base setup (MQTT broker, charger wiring, discovery).
 
 ---
 
-## Native HA Entity Reader (Add-on Only)
+## Native HA Entity Reader
 
-**If you are running the Panya Charge OSS add-on, you do not need any MQTT
-bridge automations.** The add-on reads Enphase entity states directly from
-Home Assistant's Services API and publishes them to the internal smart charging
-controller without going through the MQTT broker.
+**The add-on reads Enphase entity states directly from Home Assistant's
+Supervisor API.** No MQTT bridge automations needed. The add-on polls
+energy entities every 10s and feeds them into the smart charging controller.
 
 To enable this mode in the add-on Configuration tab:
 
-1. Set `solar_power_topic` to your Enphase production entity ID
+1. Set `solar_entity_id` to your Enphase production entity ID
    (e.g. `sensor.enphase_envoy_current_power_production`)
-2. Set `consumption_power_topic` to your Enphase consumption entity ID
+2. Set `consumption_entity_id` to your Enphase consumption entity ID
    (e.g. `sensor.enphase_envoy_home_power_consumption`)
-3. (Optional) Set `grid_power_topic` to your grid power entity ID or leave
+3. (Optional) Set `grid_entity_id` to your grid power entity ID or leave
    empty to compute it from solar minus consumption
 
 The add-on polls these entities automatically and feeds the values into the
@@ -38,11 +37,10 @@ configuration needed.
 
 ---
 
-## Legacy: MQTT Automation Bridge (Deprecated)
+## Legacy: MQTT Automation Bridge
 
-> **This approach is deprecated.** If you use the HA add-on, use the native
-> entity reader above instead. This section is preserved for users who run
-> panya-charge-oss in standalone mode or need a custom setup.
+> **This approach is deprecated.** Use the native entity reader above. This
+> section is preserved for developers embedding the CSMS library directly.
 
 ### How the Data Flows (Legacy)
 
@@ -64,7 +62,7 @@ panya subscribes to.
 
 ---
 
-## What panya Subscribes To (Standalone Mode)
+## What panya Subscribes To (Legacy MQTT)
 
 > **Add-on users:** skip this table. Configure entity IDs directly in the
 > add-on's Configuration tab using the native entity reader described above.
@@ -120,7 +118,7 @@ when `|solar − consumption + grid| > 500 W`, indicating sensor drift.
 
 ---
 
-## Option A: Solar + Consumption (Standalone Mode)
+## Option A: Solar + Consumption (Legacy MQTT)
 
 > **Add-on users:** skip this section. Configure your entity IDs in the native
 > entity reader instead.
@@ -343,7 +341,7 @@ an always-positive value (import only) with a separate export entity. To verify:
 
 ---
 
-## Option C: Point panya at Existing HA MQTT Topics (Standalone Only)
+## Option C: Point panya at Existing HA MQTT Topics (Legacy)
 
 If you already publish Envoy data to MQTT (via Node-RED, AppDaemon, or another
 integration), skip the bridge automation entirely and point panya at those

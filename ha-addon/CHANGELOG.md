@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.22
+
+- Position as HA add-on only — remove standalone deployment from README and docs
+- Fix icon and logo loading in Docker image
+- Entity ID fields use plain text input in add-on config
+- Restore external MQTT broker override fields
+
 ## 0.1.19
 
 - Entity selectors: pick grid/solar/consumption sensors from a dropdown instead of typing entity IDs

@@ -307,7 +307,7 @@ This is handled automatically by the CSMS. If you still see rejections:
 
 ---
 
-## Switching from Standalone
+## Migrating from a previous standalone setup
 
 If you were running panya-charge-oss as a standalone binary, migrate your
 `config.yaml` values to the add-on UI fields:
@@ -347,7 +347,7 @@ binary or access the charger directly.
   energy dashboard wiring, manual MQTT control
 - [Smart Charging with HA Sensors](home-assistant.md#smart-charging-with-ha-sensors)
   wiring grid, solar, and consumption sensors
-- [Config WebUI](webui.md) - optional web interface (standalone mode only)
+- [Config WebUI](webui.md) - optional web interface (developer/embedding use only)
 - [ABB Terra AC Hardware Notes](hardware/abb-terra-ac.md) - charger-specific
   quirks and firmware details
 - [OCPP Compatibility Notes](ocpp-compatibility.md) - charger-specific
