@@ -364,14 +364,15 @@ input:disabled{opacity:.5;color:var(--ink-3)}
 .topic-value{
     font-family:var(--mono,monospace);
     font-size:.8rem;
-    background:var(--bg-2,#f5f5f5);
+    color:var(--ink);
+    background:var(--surface-2);
     padding:2px 8px;
     border-radius:4px;
 }
 
 .topic-empty{
     font-size:.8rem;
-    color:var(--ink-3,#999);
+    color:var(--ink-3);
     font-style:italic;
 }
 
