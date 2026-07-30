@@ -64,7 +64,8 @@ func New(cfg config.Config) (*CSMS, error) {
 	emitter := pkgcsms.NewEmitter(0, logger)
 
 	var energy ports.EnergySource
-	if cfg.Energy.HASS.GridEntityID != "" || cfg.Energy.HASS.SolarEntityID != "" || cfg.Energy.HASS.ConsumptionEntityID != "" {
+	energyConfigured := cfg.Energy.HASS.GridEntityID != "" || cfg.Energy.HASS.SolarEntityID != "" || cfg.Energy.HASS.ConsumptionEntityID != ""
+	if energyConfigured {
 		hassCfg := iha.HASSConfig{
 			GridEntityID:        cfg.Energy.HASS.GridEntityID,
 			SolarEntityID:       cfg.Energy.HASS.SolarEntityID,
@@ -72,8 +73,14 @@ func New(cfg config.Config) (*CSMS, error) {
 			Token:               cfg.Energy.HASS.Token,
 		}
 		energy = iha.NewEnergySource(hassCfg, "http://supervisor/core/api", cfg.Energy.HASS.Token, logger)
+		logger.Info("energy source configured — smart charging enabled",
+			"grid", hassCfg.GridEntityID,
+			"solar", hassCfg.SolarEntityID,
+			"consumption", hassCfg.ConsumptionEntityID,
+		)
 	} else {
 		energy = ports.NoOpEnergySource{}
+		logger.Info("no energy entities configured — smart charging disabled")
 	}
 
 	publisher, err := outmqtt.NewPublisher(
@@ -132,6 +139,14 @@ func New(cfg config.Config) (*CSMS, error) {
 		logger,
 	)
 	controller.SetEmitter(emitter)
+
+	// Disable smart charging when no energy entities are configured.
+	// NoOpEnergySource reports always-stale, which would cause the controller
+	// to revert all chargers to safe state (6A) every 10 seconds — even though
+	// the user has no intention of using smart charging.
+	if !energyConfigured {
+		controller.SetEnabled(false)
+	}
 
 	publisher.SetOnReconnect(func() {
 		publisher.PublishGlobalDiscovery()

@@ -6,6 +6,7 @@
 - Fix icon and logo loading in Docker image
 - Entity ID fields use plain text input in add-on config
 - Restore external MQTT broker override fields
+- Fix: disable smart charging controller when no energy entities configured (was forcing 6A every 10s)
 
 ## 0.1.19
 
