@@ -1,21 +1,22 @@
 # Home Assistant Integration Guide
 
 This guide walks through connecting an OCPP 1.6-J compatible EV charger to
-Home Assistant via `panya-charge-oss`.
+Home Assistant via the `panya-charge-oss` add-on.
 
 ## Architecture
 
 ```
-Charger ──OCPP 1.6-J WebSocket──→ panya-charge-oss ──MQTT──→ Home Assistant
-                                       ↑                          ↓
-                                   MQTT broker ←── Grid/Solar sensors
+Charger ──OCPP 1.6-J WebSocket──→ Panya Charge OSS add-on ──MQTT──→ Home Assistant
+                                          ↑                            
+                               Supervisor API (entity polling)
+                                          ↓
+                              Grid/Solar/Consumption sensors
 ```
 
-`panya-charge-oss` acts as a CSMS (Central System Management System). It speaks
-OCPP to the charger on one side and MQTT to Home Assistant on the other. No
-add-on, HACS repository, or custom component is required — Home Assistant's
-built-in [MQTT integration](https://www.home-assistant.io/integrations/mqtt/)
-discovers the charger entities automatically.
+The add-on acts as a CSMS (Central System Management System). It speaks OCPP
+to the charger and MQTT to Home Assistant. Charger entities are discovered
+automatically via MQTT Discovery. Energy sensors are read directly via the
+Supervisor API — no bridge automations needed.
 
 ---
 
@@ -26,109 +27,50 @@ discovers the charger entities automatically.
 | Home Assistant | 2024.x or newer (MQTT Discovery support) |
 | MQTT Broker | Mosquitto broker add-on (recommended) or external broker |
 | OCPP 1.6-J Charger | Target: ABB Terra AC; any OCPP 1.6-J charger should work (simulator-validated, hardware testing pending) |
-| Go 1.25+ | Only if building from source |
-| Network | Charger must reach the CSMS host on port 8887 (TCP) |
+| Network | Charger must reach HA on port 8887 (TCP) |
 
-### 1. Set Up the MQTT Broker
+### 1. Install the Add-on
 
-If you don't already have an MQTT broker in your Home Assistant setup:
+See the **[Install Guide](add-on-install.md)** for step-by-step installation.
 
-1. In HA, go to **Settings → Add-ons → Add-on Store**
-2. Install **Mosquitto broker**
-3. Start the add-on and enable *Start on boot*
-4. Go to **Settings → Devices & Services → Add Integration → MQTT**
-5. Configure to connect to your local broker:
-   - Broker: `core-mosquitto` (if using the add-on)
-   - Port: `1883`
-   - Username / Password: your HA account credentials (the Mosquitto add-on uses HA authentication)
+Quick version:
+1. **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
+2. Add: `https://github.com/chiabcc/panya-charge-oss`
+3. Install **Panya Charge OSS**
+4. Set charging parameters and energy entity IDs in the Configuration tab
+5. Start the add-on
 
-Verify the connection works:
+The add-on auto-discovers the MQTT broker via the Supervisor API — no manual broker config needed.
 
-```bash
-# From a machine with mosquitto_sub, or use the Mosquitto add-on's "Log Viewer"
-mosquitto_sub -h <ha-ip> -p 1883 -u <user> -P <pass> -t "#" -C 1
-```
-
-If you see a message within a few seconds, MQTT is working.
-
-### 2. Configure panya-charge-oss
-
-Create `config.yaml` pointing at your HA MQTT broker:
-
-```yaml
-server:
-  ocpp_port: 8887
-  ocpp_path: "/{ws}"
-  log_level: info
-
-mqtt:
-  broker: "tcp://192.168.1.100:1883"   # your HA / Mosquitto broker IP
-  client_id: "panya-charge"
-  username: "your-ha-user"              # omit if broker has no auth
-  password: "your-ha-password"          # omit if broker has no auth
-  base_topic: "panya"
-  disconnect_threshold_sec: 60
-
-charging:
-  min_amps: 6              # IEC 61851 minimum
-  max_amps: 32             # Type 2 / 22 kW single-phase max
-  contactor_cooldown_sec: 180
-  default_amps: 6
-```
-
-> **Important:** `base_topic` must be unique per CSMS instance. If you run
-> multiple CSMS instances against the same broker, use different base topics
-> (e.g. `panya-garage`, `panya-driveway`).
-
-Start the CSMS:
-
-```bash
-go run ./cmd/panya-charge-oss -config config.yaml
-```
-
-You should see:
-
-```
-INFO mqtt subscriber connected broker=tcp://192.168.1.100:1883
-INFO ocpp server listening port=8887
-INFO csms started
-```
-
-### 3. Point Your Charger at the CSMS
+### 2. Point Your Charger at the CSMS
 
 In your charger's web interface or configuration menu, set the OCPP backend URL:
 
 ```
-ws://<csms-host-ip>:8887/{ws}
+ws://<ha-ip>:8887/{ws}
 ```
 
-- Use `ws://` for plaintext WebSocket on the local network
-- Use `wss://` only if you've set up TLS termination (reverse proxy with certs)
-- The `/{ws}` path suffix is **required** — the OCPP library uses it to identify the WebSocket upgrade endpoint
-- Set a charger identity (usually the serial number or a custom ID) — this becomes `<id>` in all MQTT topics
+- Use your Home Assistant host's LAN IP address
+- The `/{ws}` path suffix is **required**
+- Set a charger identity (usually the serial number) — this becomes `<id>` in all MQTT topics
 
 For the **ABB Terra AC** specifically:
 - Firmware ≥ 1.8.32 required for OCPP 1.6-J
 - Menu: **Settings → Backend → OCPP URL**
 - Set the charge point ID in the same menu
 
-### 4. Verify the Charger Connected
+### 3. Verify the Charger Connected
 
-The charger should send a `BootNotification` on startup. Watch the CSMS logs:
+Check the add-on logs (Configuration tab → Log). You should see:
 
 ```
 INFO boot notification charger_id=ABB-001243 model=Terra-AC firmware=1.8.32
 INFO mqtt discovery published charger_id=ABB-001243
 ```
 
-If you don't see anything within 30 seconds:
-- Confirm the charger's OCPP URL exactly matches `ws://<ip>:8887/{ws}`
-- Check that port 8887 is reachable from the charger (firewall, VLANs)
-- Set `log_level: debug` in the config to see WebSocket connection attempts
+### 4. Verify Entities in Home Assistant
 
-### 5. Verify Entities in Home Assistant
-
-Once `BootNotification` fires, the CSMS publishes MQTT Discovery payloads.
+Once `BootNotification` fires, the add-on publishes MQTT Discovery payloads.
 Home Assistant picks these up within a few seconds.
 
 1. Go to **Settings → Devices & Services → MQTT**
@@ -158,8 +100,8 @@ following entities grouped under it.
 | Charging Power | sensor | kW | Instantaneous charging power (3 decimals) |
 | Session Energy | sensor | kWh | Cumulative energy this session — Energy Dashboard compatible |
 | Grid Power | sensor | W | Grid net power (negative = exporting to grid) |
-| Solar Power | sensor | W | Solar production *(only if `solar_power` topic configured)* |
-| Home Consumption | sensor | W | Whole-home consumption *(only if `consumption_power` topic configured)* |
+| Solar Power | sensor | W | Solar production *(only if `solar_entity_id` configured)* |
+| Home Consumption | sensor | W | Whole-home consumption *(only if `consumption_entity_id` configured)* |
 | Proxy Connected | binary_sensor | — | Upstream relay active *(only when proxy relay enabled)* |
 
 ### Configuration Entities (under "Configuration" section)
@@ -190,148 +132,34 @@ This gives you per-charger energy usage alongside your home's overall consumptio
 
 ---
 
-## Smart Charging with HA Sensors
+## Smart Charging Setup
 
-`panya-charge-oss` adjusts charging current based on power surplus. To enable
-this, the CSMS needs to know your grid / solar / consumption power.
+`panya-charge-oss` adjusts charging current based on power surplus. The add-on
+reads energy entities directly via the Supervisor API every 10 seconds — no
+MQTT bridge automations needed.
 
-### Option A: Using HA's Grid Power (Simplest)
+### Configuration
 
-If you have a grid meter that publishes to MQTT (Shelly, EMP2410, etc.):
+In the add-on Configuration tab, set these fields:
 
-```yaml
-mqtt:
-  base_topic: "panya"
-  topics:
-    grid_power: "energy/grid/power"   # your grid meter's power topic
-```
-
-The CSMS subscribes to `panya/energy/grid/power` and treats positive values
-as grid import (charging from grid), negative as export (surplus available).
-
-### Option B: Using Solar + Consumption (More Accurate)
-
-If you have separate solar and home consumption sensors:
-
-```yaml
-mqtt:
-  base_topic: "panya"
-  topics:
-    grid_power: "energy/grid/power"
-    solar_power: "energy/solar/power"         # optional
-    consumption_power: "energy/home/power"    # optional
-```
-
-When both `solar_power` and `consumption_power` are available, the CSMS uses
-`solar - consumption` for surplus calculation (more accurate than grid alone,
-which has metering lag and rounding).
-
-### Wiring HA Sensors to the CSMS Topics
-
-Your grid/solar/consumption sensors likely publish to their own topics. You
-have two options:
-
-1. **Re-publish to the expected topic** — use an HA automation or Node-RED to forward:
-   ```yaml
-   # Example HA automation
-   trigger:
-     - platform: state
-       entity_id: sensor.grid_power
-   action:
-     - service: mqtt.publish
-data:
-          topic: "panya/energy/grid/power"
-          payload: "{{ trigger.to_state.state | float(0) }}"
-    ```
-
-2. **Point the CSMS at your existing topics** — change the `topics.grid_power` config to match your sensor's topic. The CSMS accepts both raw numeric payloads and JSON objects with a `power` field.
-
-### Generic Template: Any Energy Integration
-
-If you're using an energy integration other than Enphase (SolarEdge, P1 meter, Shelly 3EM,
-Fronius, etc.), bridge your HA energy sensors to panya's MQTT topics using this generic
-template.
+| Field | What to enter |
+|-------|---------------|
+| `solar_entity_id` | Your solar production sensor (e.g. `sensor.enphase_envoy_current_power_production`) |
+| `consumption_entity_id` | Your whole-home consumption sensor (e.g. `sensor.enphase_envoy_home_power_consumption`) |
+| `grid_entity_id` | Your grid power sensor (e.g. `sensor.grid_power`). Positive = importing, negative = exporting |
 
 ### Strategy Selection
 
-| What you have | Strategy |
+| What you have | What to set |
 |---|---|
-| Solar production + home consumption sensors | **Recommended** — most accurate, direct from inverter |
-| Grid power sensor only | Simplest setup, one sensor |
-| All three (solar + consumption + grid) | Best — catches sensor drift via cross-validation |
+| Solar + consumption sensors | `solar_entity_id` + `consumption_entity_id` (recommended — most accurate) |
+| Grid power sensor only | `grid_entity_id` (simplest) |
+| All three | Set all three — controller cross-validates |
 
-### Option 1: Solar + Consumption (Recommended)
+When solar + consumption are both set, the controller calculates surplus as
+`solar − consumption`. If only grid is set, it uses the grid sign directly.
 
-```yaml
-- alias: "Bridge solar to panya"
-  trigger:
-    - platform: state
-      entity_id: {{ your_solar_sensor }}
-  action:
-    - service: mqtt.publish
-      data:
-        topic: "panya/solar/power"
-        payload: "{{ states('{{ your_solar_sensor }}') | float(0) | round(0) }}"
-        retain: true
-
-- alias: "Bridge consumption to panya"
-  trigger:
-    - platform: state
-      entity_id: {{ your_consumption_sensor }}
-  action:
-    - service: mqtt.publish
-      data:
-        topic: "panya/home/power"
-        payload: "{{ states('{{ your_consumption_sensor }}') | float(0) | round(0) }}"
-        retain: true
-```
-
-### Option 2: Grid Power Only
-
-```yaml
-- alias: "Bridge grid power to panya"
-  trigger:
-    - platform: state
-      entity_id: {{ your_grid_sensor }}
-  action:
-    - service: mqtt.publish
-      data:
-        topic: "panya/grid/power"
-        payload: "{{ states('{{ your_grid_sensor }}') | float(0) | round(0) }}"
-        retain: true
-```
-
-### Option 3: Time-Based Trigger (Alternative)
-
-If your sensor updates at a different rate, or you prefer predictable cadence, use
-`time_pattern` to publish every 15 seconds:
-
-```yaml
-- alias: "Bridge energy to panya (time-based)"
-  trigger:
-    - platform: time_pattern
-      seconds: "/15"
-  action:
-    - service: mqtt.publish
-      data:
-        topic: "panya/solar/power"
-        payload: "{{ states('{{ your_solar_sensor }}') | float(0) | round(0) }}"
-        retain: true
-    - service: mqtt.publish
-      data:
-        topic: "panya/home/power"
-        payload: "{{ states('{{ your_consumption_sensor }}') | float(0) | round(0) }}"
-        retain: true
-```
-
-### Unavailable Entity Handling
-
-The `| float(0)` filter prevents silent failures when an entity goes "unavailable" or "unknown".
-Without it, panya's `parsePowerPayload` silently rejects the string "unavailable" — the app
-sees stale data and falls to safe state (6A). With `float(0)`, it publishes `0` instead,
-which is explicitly handled as "no surplus".
-
-### Common Entity Patterns
+### Common Entity IDs
 
 Verify your entity IDs in **Developer Tools → States**. Common patterns:
 
@@ -343,25 +171,23 @@ Verify your entity IDs in **Developer Tools → States**. Common patterns:
 | Shelly 3EM | `sensor.shelly_em_xxx_channel_0_power` | *(varies)* | *(varies)* |
 | Fronius | `sensor.fronius_smart_meter_power_active_phase_1` | *(none)* | `sensor.fronius_smart_meter_power` |
 
-> **Note**: Entity names vary by configuration and HA version. Check your actual entities in
-> HA Developer Tools before using them in automations.
+> **Note**: Entity names vary by configuration and HA version. Check your actual
+> entities in HA Developer Tools.
 
-See the [Enphase Envoy Integration Guide](enphase-integration.md) for a detailed Enphase
-walkthrough with additional options.
+See the [Enphase Envoy Integration Guide](enphase-integration.md) for a detailed walkthrough.
 
 ### How the Controller Responds
 
 - **Surplus available** → increases charging current (up to `max_amps`)
 - **Drawing from grid** → decreases current (down to `min_amps`)
-- **No grid data for 60s** → falls back to `min_amps` (6A) as a safe state
+- **No fresh data for 60s** → falls back to `min_amps` (6A) as a safe state
 - **Start/stop commands** → 180-second contactor cooldown enforced to prevent hardware damage
 
 ---
 
 ## Vendor-Specific Guides
 
-- [Enphase Envoy Integration](enphase-integration.md) — bridging Enphase solar
-  production and consumption sensors for solar surplus smart charging
+- [Enphase Envoy Integration](enphase-integration.md) — Enphase solar setup for smart charging
 
 ---
 

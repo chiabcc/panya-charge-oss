@@ -84,18 +84,23 @@ Set to `debug` when troubleshooting connection issues.
 | `default_amps` | `6` | Current applied when the charger first connects or when smart charging falls back |
 | `contactor_cooldown_sec` | `180` | Minimum seconds between start/stop commands to protect the charger contactor |
 
-### MQTT Topics (Smart Charging)
+### Energy Entity IDs (Smart Charging)
 
-These topics feed power data into the smart charging controller:
+These entity IDs feed power data into the smart charging controller. The
+add-on reads them directly via the Supervisor API every 10 seconds — no
+MQTT bridge automations needed.
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `grid_power_topic` | `grid/power` | Topic the CSMS subscribes to for grid power data. Positive = importing from grid, negative = exporting (surplus) |
-| `solar_power_topic` | _(empty)_ | Optional: solar production topic. When set with `consumption_power_topic`, the CSMS calculates surplus as solar minus consumption (more accurate than grid alone) |
-| `consumption_power_topic` | _(empty)_ | Optional: whole-home consumption topic |
+| Field | Description |
+|-------|-------------|
+| `grid_entity_id` | Grid power entity (e.g. `sensor.grid_power`). Positive = importing, negative = exporting (surplus) |
+| `solar_entity_id` | Solar production entity (e.g. `sensor.enphase_envoy_current_power_production`) |
+| `consumption_entity_id` | Whole-home consumption entity (e.g. `sensor.enphase_envoy_home_power_consumption`) |
 
-Set a topic to empty to disable it. At minimum, set `grid_power_topic` to
-point at your meter or Home Assistant energy sensor's MQTT topic.
+When solar + consumption are both set, the controller calculates surplus as
+`solar − consumption`. If only grid is set, it uses grid sign directly.
+Leave all empty to disable smart charging.
+
+See [Enphase Integration Guide](enphase-integration.md) for sensor setup details.
 
 ### Advanced
 
@@ -289,9 +294,9 @@ telnet <HA-IP> 8887
 
 **Checklist:**
 
-- `grid_power_topic` is set and your meter publishes to that topic
-- Values are flowing (positive for import, negative for export)
-- If no data arrives within `disconnect_threshold_sec` seconds, the controller
+- Energy entity IDs are set in Configuration (e.g. `grid_entity_id`)
+- Entities have valid numeric states (not "unavailable" or "unknown")
+- If no fresh data within `disconnect_threshold_sec` seconds, the controller
   falls back to `min_amps` (6A)
 - After a start/stop command, the `contactor_cooldown_sec` lockout prevents
   further adjustments for 180 seconds
@@ -326,10 +331,8 @@ If you were running panya-charge-oss as a standalone binary, migrate your
 | `charging.max_amps` | `max_amps` |
 | `charging.default_amps` | `default_amps` |
 | `charging.contactor_cooldown_sec` | `contactor_cooldown_sec` |
-| `mqtt.topics.grid_power` | `grid_power_topic` |
-| `mqtt.topics.solar_power` | `solar_power_topic` |
-| `mqtt.topics.consumption_power` | `consumption_power_topic` |
 | `mqtt.disconnect_threshold_sec` | `disconnect_threshold_sec` |
+| _(energy input — use entity IDs now)_ | `grid_entity_id`, `solar_entity_id`, `consumption_entity_id` |
 
 The `mqtt.broker`, `mqtt.username`, and `mqtt.password` are fetched
 automatically from Home Assistant's Services API. You don't need to enter

@@ -113,47 +113,30 @@ curl http://127.0.0.1:8888/api/status
 
 In HA add-on mode, the status page is served via HA ingress. Click "Open Web UI" on the add-on page in HA. The config editor stays disabled — all configuration is done through HA's schema form.
 
-## Docker
+## Developer Usage
 
-### Expose the Web UI
+> The WebUI is a **developer tool** for local development and library embedding.
+> In the HA add-on, the status page is served via ingress and the config editor
+> is not available — use the add-on's Configuration tab instead.
 
-The root `Dockerfile` exposes port `8887` (OCPP). To access the Web UI or status page, also publish port `8888`:
+### Running locally
 
 ```bash
-docker build -t panya-charge-oss .
-
-docker run -p 8887:8887 -p 8888:8888 \
-  -v $(pwd)/config.yaml:/data/config.yaml \
-  panya-charge-oss
+go run ./cmd/panya-charge-oss
 ```
 
-Then access:
+Access:
 - **Status page**: `http://localhost:8888/status`
 - **Config editor** (if `webui.enabled: true`): `http://localhost:8888`
-
-### Status page only
-
-To run with just the status page (no config editor), set env vars:
-
-```bash
-docker run -p 8887:8887 -p 8888:8888 \
-  -e PANYA_WEBUI_ENABLED=false \
-  -e PANYA_WEBUI_STATUS_ENABLED=true \
-  -e PANYA_MQTT_BROKER=tcp://host.docker.internal:1883 \
-  panya-charge-oss -config ""
-```
-
-> **Note**: Inside Docker, use `host.docker.internal` (or the host's IP) to reach an MQTT broker running on the host. `localhost` inside the container refers to the container itself.
 
 ### Full config editor + status page
 
 ```bash
-docker run -p 8887:8887 -p 8888:8888 \
-  -e PANYA_WEBUI_ENABLED=true \
-  -e PANYA_WEBUI_LISTEN=0.0.0.0:8888 \
-  -e PANYA_WEBUI_TOKEN=your-secret-token \
-  -e PANYA_MQTT_BROKER=tcp://host.docker.internal:1883 \
-  panya-charge-oss -config ""
+PANYA_WEBUI_ENABLED=true \
+PANYA_WEBUI_LISTEN=0.0.0.0:8888 \
+PANYA_WEBUI_TOKEN=your-secret-token \
+PANYA_MQTT_BROKER=tcp://localhost:1883 \
+go run ./cmd/panya-charge-oss -config ""
 ```
 
 Access config editor at `http://localhost:8888`, enter token to log in. Status page at `http://localhost:8888/status` is always accessible without auth.
