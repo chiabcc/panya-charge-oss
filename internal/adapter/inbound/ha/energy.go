@@ -158,6 +158,8 @@ func (e *EnergySource) pollEntity(entityID, entityType string) {
 	}
 
 	if state.State == "unavailable" || state.State == "unknown" {
+		e.logger.Debug("ha energy: entity state unavailable, skipping",
+			"entity_id", entityID, "state", state.State)
 		return
 	}
 
