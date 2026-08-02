@@ -440,3 +440,29 @@ func TestNormalizeToWatts(t *testing.T) {
 		}
 	}
 }
+
+// TestPollOnce_URLOnlySingleAPI guards against the double-/api/ bug that caused
+// the add-on to call /core/api/api/states/... instead of /core/api/states/...
+// (which returned 404 from HA Core after the Supervisor auth middleware let it through).
+func TestPollOnce_URLOnlySingleAPI(t *testing.T) {
+	t.Parallel()
+
+	var capturedPath string
+	ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		_, _ = w.Write(newEntityState("1000"))
+	})
+
+	es := NewEnergySource(
+		HASSConfig{GridEntityID: "sensor.grid"},
+		ts.URL, // simulate baseURL root like "http://supervisor/core"
+		"test-token",
+		nil,
+	)
+	es.pollOnce()
+
+	const want = "/api/states/sensor.grid"
+	if capturedPath != want {
+		t.Errorf("request path = %q, want %q (no double /api/)", capturedPath, want)
+	}
+}

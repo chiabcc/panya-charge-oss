@@ -72,7 +72,7 @@ func New(cfg config.Config) (*CSMS, error) {
 			ConsumptionEntityID: cfg.Energy.HASS.ConsumptionEntityID,
 			Token:               cfg.Energy.HASS.Token,
 		}
-		energy = iha.NewEnergySource(hassCfg, "http://supervisor/core/api", cfg.Energy.HASS.Token, logger)
+		energy = iha.NewEnergySource(hassCfg, "http://supervisor/core", cfg.Energy.HASS.Token, logger)
 		logger.Info("energy source configured — smart charging enabled",
 			"grid", hassCfg.GridEntityID,
 			"solar", hassCfg.SolarEntityID,
