@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5](https://github.com/chiabcc/panya-charge-oss/compare/v0.2.4...v0.2.5) (2026-08-02)
+
+
+### Bug Fixes
+
+* **energy:** log when entity state is unavailable or unknown ([5a83970](https://github.com/chiabcc/panya-charge-oss/commit/5a839703281f1f884706d3d07fe8f6d72326a163))
+
 ## [0.2.4](https://github.com/chiabcc/panya-charge-oss/compare/v0.2.3...v0.2.4) (2026-08-02)
 
 
