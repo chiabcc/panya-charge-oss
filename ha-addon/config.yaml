@@ -15,6 +15,7 @@ ports:
 ports_description:
   "8887/tcp": "OCPP WebSocket port. Chargers connect to ws://<HA-IP>:8887/{ws}"
 host_network: false
+homeassistant: true
 ingress: true
 ingress_port: 8888
 services:

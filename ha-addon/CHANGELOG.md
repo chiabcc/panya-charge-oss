@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Fix smart charging reading sensors failing with 401 Unauthorized — add-on now requests Home Assistant API access in its manifest so the Supervisor token can read entity states
+
 ## 0.2.1
 
 - Fix smart charging never working — chargers stayed at minimum current (6A) with "energy data stale" warnings even when solar surplus was available
