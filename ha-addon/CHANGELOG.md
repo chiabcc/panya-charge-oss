@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+### Bug Fixes
+
+* **smart-charging:** correct Supervisor API base URL to avoid double /api/ ([2fc5d20](https://github.com/chiabcc/panya-charge-oss/commit/2fc5d2017ef9ec40568f26c1efdc13fed4d9ded8))
+
 ## 0.2.2
 
 - Fix smart charging reading sensors failing with 401 Unauthorized — add-on now requests Home Assistant API access in its manifest so the Supervisor token can read entity states
