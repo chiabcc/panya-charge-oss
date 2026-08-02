@@ -11,8 +11,13 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.rp.outputs.releases_created }}
+      version: ${{ steps.rp.outputs.version }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
+        id: rp
         with:
           release-type: go
           package-name: panya-charge-oss
@@ -28,3 +33,86 @@ jobs:
               {"type":"chore","section":"Miscellaneous","hidden":true},
               {"type":"test","section":"Tests","hidden":false}
             ]
+
+  # Syncs ha-addon/config.yaml + ha-addon/CHANGELOG.md with the version release-please
+  # just tagged, then moves the tag to include this sync commit. Without this step the
+  # version baked into the Docker image drifts from the GitHub Release tag (release-please
+  # only manages top-level Go artifacts).
+  bump-ha-addon:
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync ha-addon version files
+        env:
+          VERSION: ${{ needs.release-please.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # 1. Bump ha-addon/config.yaml: replace the version: "X.Y.Z" line.
+          sed -i -E "s|^version: \".*\"|version: \"${VERSION}\"|" ha-addon/config.yaml
+          echo "::notice::ha-addon/config.yaml bumped to ${VERSION}"
+
+          # 2. Prepend matching section from top-level CHANGELOG.md to ha-addon/CHANGELOG.md.
+          # Top-level format:    ## [X.Y.Z](...) (date)
+          # ha-addon format:     ## X.Y.Z
+          python3 - <<'PY'
+          import os, re, sys
+          version = os.environ.get("VERSION", "").strip()
+          if not version:
+              sys.exit(0)
+          src = open("CHANGELOG.md").read()
+          pattern = re.compile(
+              r"^## (?:\[)?" + re.escape(version) + r"(?:\][^\n]*)?\n(?:(?!^## )[\s\S])+",
+              re.MULTILINE
+          )
+          m = pattern.search(src)
+          if not m:
+              print(f"::warning::no ## {version} section found in top-level CHANGELOG.md")
+              sys.exit(0)
+          dest = open("ha-addon/CHANGELOG.md").read()
+          if re.search(r"^## " + re.escape(version) + r"\s*$", dest, re.MULTILINE):
+              print(f"::notice::## {version} already in ha-addon/CHANGELOG.md — skipping")
+              sys.exit(0)
+          body = m.group(0)
+          body = re.sub(r"^## [^\n]*\n", "", body, count=1)
+          body = body.lstrip("\n")
+          entry = f"## {version}\n\n" + body.rstrip() + "\n\n"
+          head_match = re.match(r"(^# Changelog\s*\n\s*\n)", dest)
+          if head_match:
+              out = head_match.group(1) + entry + dest[head_match.end():]
+          else:
+              out = entry + dest
+          open("ha-addon/CHANGELOG.md", "w").write(out)
+          print(f"::notice::prepended ## {version} section to ha-addon/CHANGELOG.md")
+          PY
+
+      - name: Commit and move tag
+        env:
+          VERSION: ${{ needs.release-please.outputs.version }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ha-addon/config.yaml ha-addon/CHANGELOG.md
+
+          if git diff --cached --quiet; then
+            echo "::notice::no version-sync changes needed"
+            exit 0
+          fi
+
+          git commit -m "chore(ha-addon): sync version files for ${TAG}"
+
+          # Move the tag to include the sync commit, then push commit + moved tag.
+          git tag -f "${TAG}"
+          git push origin "${TAG}" --force
+          git push origin HEAD:main

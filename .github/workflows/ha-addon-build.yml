@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -13,16 +17,30 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.arch }}
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
         arch: [amd64, aarch64]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Extract version from tag
+      - name: Resolve version
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            # Triggered by workflow_run or workflow_dispatch: find tag at HEAD.
+            VERSION=$(git tag --points-at HEAD --list 'v*.*.*' | head -1 | sed 's/^v//')
+          fi
+          if [[ -z "${VERSION}" ]]; then
+            echo "No release tag found at HEAD; nothing to build."
+            exit 0
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         if: matrix.arch == 'aarch64'
@@ -39,6 +57,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.arch }} image
+        if: steps.version.outputs.VERSION != ''
         uses: docker/build-push-action@v6
         with:
           context: .
