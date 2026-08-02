@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3](https://github.com/chiabcc/panya-charge-oss/compare/v0.2.2...v0.2.3) (2026-08-02)
+
+
+### Bug Fixes
+
+* **smart-charging:** correct Supervisor API base URL to avoid double /api/ ([2fc5d20](https://github.com/chiabcc/panya-charge-oss/commit/2fc5d2017ef9ec40568f26c1efdc13fed4d9ded8))
+
 ## [0.2.2](https://github.com/chiabcc/panya-charge-oss/compare/v0.2.1...v0.2.2) (2026-08-02)
 
 
