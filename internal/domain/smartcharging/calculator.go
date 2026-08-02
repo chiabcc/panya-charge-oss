@@ -7,11 +7,17 @@ import (
 
 const crossValidationToleranceW = 500.0
 
-// Calculator computes the optimal charging current limit based on
-// real-time solar surplus and grid power data.
-//
-// All logic is pure Go — no I/O, no side effects.
-// The OCPP adapter translates the output into SetChargingProfile calls.
+const (
+	stopConfirmTicks = 3
+	runConfirmTicks  = 2
+)
+
+type chargerStopState struct {
+	isStopped  bool
+	belowCount int
+	aboveCount int
+}
+
 type Calculator struct {
 	mu         sync.RWMutex
 	minAmps    int
@@ -19,6 +25,7 @@ type Calculator struct {
 	gridVolt   float64
 	hysteresis int
 	lastLimit  map[string]int
+	stopState  map[string]*chargerStopState
 }
 
 func NewCalculator(minAmps, maxAmps int, gridVolt float64) *Calculator {
@@ -28,10 +35,10 @@ func NewCalculator(minAmps, maxAmps int, gridVolt float64) *Calculator {
 		gridVolt:   gridVolt,
 		hysteresis: 2,
 		lastLimit:  make(map[string]int),
+		stopState:  make(map[string]*chargerStopState),
 	}
 }
 
-// SetLimits updates the min/max amp bounds used by Compute.
 func (c *Calculator) SetLimits(minAmps, maxAmps int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -39,16 +46,6 @@ func (c *Calculator) SetLimits(minAmps, maxAmps int) {
 	c.maxAmps = maxAmps
 }
 
-// Compute determines the ideal charging profile from the latest meter data.
-//
-// Surplus strategy (v1.5 multi-source):
-//   - Primary:   surplus = solar - consumption  (when both available)
-//   - Fallback:  surplus = -grid                (grid-only, v0.1.0 compat)
-//   - Cross-val: warn if |solar - consumption + grid| > tolerance (sensor drift)
-//
-// surplus > 0 (exporting): ramp charging up
-// surplus < 0 (importing): ramp charging down
-// below minimum: stop or fall back to minimum
 func (c *Calculator) Compute(chargerID string, sample MeterSample) ChargingProfileRequest {
 	surplusW := computeSurplus(sample)
 
@@ -62,7 +59,39 @@ func (c *Calculator) Compute(chargerID string, sample MeterSample) ChargingProfi
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if idealAmps < c.minAmps {
+	state := c.stopState[chargerID]
+	if state == nil {
+		state = &chargerStopState{}
+		c.stopState[chargerID] = state
+	}
+
+	wouldStop := idealAmps < c.minAmps
+
+	if state.isStopped {
+		if wouldStop {
+			state.aboveCount = 0
+		} else {
+			state.aboveCount++
+			if state.aboveCount >= runConfirmTicks {
+				state.isStopped = false
+				state.belowCount = 0
+			}
+		}
+	} else {
+		if wouldStop {
+			state.belowCount++
+			if state.belowCount >= stopConfirmTicks {
+				state.isStopped = true
+				state.aboveCount = 0
+			}
+		} else {
+			state.belowCount = 0
+		}
+	}
+
+	prevLimit, hasPrev := c.lastLimit[chargerID]
+
+	if state.isStopped {
 		c.lastLimit[chargerID] = c.minAmps
 		return ChargingProfileRequest{
 			LimitAmps:  c.minAmps,
@@ -71,14 +100,25 @@ func (c *Calculator) Compute(chargerID string, sample MeterSample) ChargingProfi
 		}
 	}
 
+	if wouldStop {
+		holdAmps := c.minAmps
+		if hasPrev && prevLimit >= c.minAmps {
+			holdAmps = prevLimit
+		}
+		c.lastLimit[chargerID] = holdAmps
+		return ChargingProfileRequest{
+			LimitAmps: holdAmps,
+			Reason:    "below threshold — holding while stop debouncing",
+		}
+	}
+
 	if idealAmps > c.maxAmps {
 		idealAmps = c.maxAmps
 	}
 
-	prev, hasPrev := c.lastLimit[chargerID]
-	if hasPrev && prev > 0 && abs(idealAmps-prev) < c.hysteresis {
+	if hasPrev && prevLimit > 0 && abs(idealAmps-prevLimit) < c.hysteresis {
 		return ChargingProfileRequest{
-			LimitAmps: prev,
+			LimitAmps: prevLimit,
 			Reason:    "within hysteresis band — holding previous limit",
 		}
 	}

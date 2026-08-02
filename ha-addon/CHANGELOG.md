@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6
+
+- Smooth out smart charging near solar surplus threshold: charger now holds its current limit for 30 seconds before ramping down, and waits 20 seconds of consistent surplus before ramping back up. Prevents charging-current flapping during partly cloudy conditions.
+
 ## 0.2.5
 
 ### Bug Fixes

@@ -34,25 +34,25 @@ func TestCalculator_Compute(t *testing.T) {
 			wantStop: false,
 		},
 		{
-			name:      "small surplus below minimum — should stop",
+			name:      "small surplus below minimum — holds previous while debouncing",
 			chargerID: "ABB-001",
 			sample: MeterSample{
 				GridPowerW: -500, // 500W export → 500/230≈2.17A < 6A minimum
 			},
-			wantAmps: 6,
-			wantStop: true,
+			wantAmps: 15, // holds previous limit during debounce
+			wantStop: false,
 		},
 		{
-			name:      "grid importing — should stop",
+			name:      "grid importing — holds previous while debouncing",
 			chargerID: "ABB-001",
 			sample: MeterSample{
 				GridPowerW: 2000, // importing 2kW
 			},
-			wantAmps: 6,
-			wantStop: true,
+			wantAmps: 15, // still debouncing
+			wantStop: false,
 		},
 		{
-			name:      "grid neutral — should stop",
+			name:      "grid neutral — third below-threshold tick triggers stop",
 			chargerID: "ABB-001",
 			sample: MeterSample{
 				GridPowerW: 0,
@@ -72,6 +72,75 @@ func TestCalculator_Compute(t *testing.T) {
 				t.Errorf("ShouldStop = %v, want %v", result.ShouldStop, tt.wantStop)
 			}
 		})
+	}
+}
+
+// TestCalculator_StopStartDebounce exercises the full state machine:
+// 3 consecutive below-threshold ticks to stop, 2 above-threshold to resume.
+func TestCalculator_StopStartDebounce(t *testing.T) {
+	c := NewCalculator(6, 32, 230.0)
+	const id = "ABB-001"
+
+	// Establish a running state at 13A (3000W surplus).
+	r := c.Compute(id, MeterSample{GridPowerW: -3000})
+	if r.LimitAmps != 13 || r.ShouldStop {
+		t.Fatalf("setup: got amps=%d stop=%v, want 13/false (%s)", r.LimitAmps, r.ShouldStop, r.Reason)
+	}
+
+	// Tick 1 below threshold: hold at 13, not stopped.
+	r = c.Compute(id, MeterSample{GridPowerW: -500})
+	if r.LimitAmps != 13 || r.ShouldStop {
+		t.Errorf("below tick 1: got amps=%d stop=%v, want 13/false (%s)", r.LimitAmps, r.ShouldStop, r.Reason)
+	}
+
+	// Tick 2 below threshold: still debouncing.
+	r = c.Compute(id, MeterSample{GridPowerW: -500})
+	if r.LimitAmps != 13 || r.ShouldStop {
+		t.Errorf("below tick 2: got amps=%d stop=%v, want 13/false (%s)", r.LimitAmps, r.ShouldStop, r.Reason)
+	}
+
+	// Tick 3 below threshold: transition to stopped.
+	r = c.Compute(id, MeterSample{GridPowerW: -500})
+	if r.LimitAmps != 6 || !r.ShouldStop {
+		t.Errorf("below tick 3: got amps=%d stop=%v, want 6/true (%s)", r.LimitAmps, r.ShouldStop, r.Reason)
+	}
+
+	// Tick 1 above threshold: still stopped (need 2 to resume).
+	r = c.Compute(id, MeterSample{GridPowerW: -3000})
+	if r.LimitAmps != 6 || !r.ShouldStop {
+		t.Errorf("above tick 1: got amps=%d stop=%v, want 6/true (still debouncing) (%s)", r.LimitAmps, r.ShouldStop, r.Reason)
+	}
+
+	// Tick 2 above threshold: resume.
+	r = c.Compute(id, MeterSample{GridPowerW: -3000})
+	if r.ShouldStop {
+		t.Errorf("above tick 2: got stop=%v, want false (resumed) (%s)", r.ShouldStop, r.Reason)
+	}
+	if r.LimitAmps != 13 {
+		t.Errorf("above tick 2: got amps=%d, want 13 (%s)", r.LimitAmps, r.Reason)
+	}
+}
+
+// TestCalculator_StopDebounceResetsOnAboveTick ensures a single above-threshold
+// reading during the stop-debounce window resets the counter.
+func TestCalculator_StopDebounceResetsOnAboveTick(t *testing.T) {
+	c := NewCalculator(6, 32, 230.0)
+	const id = "ABB-001"
+
+	// Running at 13A.
+	_ = c.Compute(id, MeterSample{GridPowerW: -3000})
+
+	// Two below-threshold ticks (1 more would trigger stop).
+	_ = c.Compute(id, MeterSample{GridPowerW: -500})
+	_ = c.Compute(id, MeterSample{GridPowerW: -500})
+
+	// Single above-threshold tick resets the counter.
+	_ = c.Compute(id, MeterSample{GridPowerW: -3000})
+
+	// One below-threshold tick should NOT trigger stop (counter restarted).
+	r := c.Compute(id, MeterSample{GridPowerW: -500})
+	if r.ShouldStop {
+		t.Errorf("after reset: single below tick triggered stop, want continued running (%s)", r.Reason)
 	}
 }
 
