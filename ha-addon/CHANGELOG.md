@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.5
+
+### Bug Fixes
+
+* **energy:** log when entity state is unavailable or unknown ([5a83970](https://github.com/chiabcc/panya-charge-oss/commit/5a839703281f1f884706d3d07fe8f6d72326a163))
+
 ## 0.2.4
 
 - Fix smart charging still failing with 401 Unauthorized — earlier release used the wrong add-on manifest field (`homeassistant: true`, which is for pinning HA Core version, not for granting API access). Correct field is `homeassistant_api: true` which enables the HA REST API proxy at http://supervisor/core/api
