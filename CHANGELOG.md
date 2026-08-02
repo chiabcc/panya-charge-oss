@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1](https://github.com/chiabcc/panya-charge-oss/compare/v0.2.0...v0.2.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* **smart-charging:** start energy poll loop, normalize kW sensors ([d9d44e3](https://github.com/chiabcc/panya-charge-oss/commit/d9d44e32538d695ed38272f293d8ac947761966d))
+
 ## [0.2.0](https://github.com/chiabcc/panya-charge-oss/compare/v0.1.0...v0.2.0) (2026-07-30)
 
 
