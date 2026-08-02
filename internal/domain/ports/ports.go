@@ -85,6 +85,15 @@ type CommandReceiver interface {
 // consumption sensors (via HA/MQTT). Adapters implement this; the smart
 // charging controller consumes it.
 type EnergySource interface {
+	// Start launches the adapter's polling/subscription loop. Must be safe
+	// to call exactly once over the lifetime of the source. The context
+	// cancels background work on shutdown.
+	Start(ctx context.Context)
+
+	// Stop tears down background work started by Start. Safe to call even
+	// if Start was never invoked.
+	Stop()
+
 	GetGridPowerW() float64
 	GetSolarPowerW() float64
 	GetConsumptionPowerW() float64
@@ -110,6 +119,8 @@ type NoOpEnergySource struct{}
 
 var _ EnergySource = (*NoOpEnergySource)(nil)
 
+func (NoOpEnergySource) Start(context.Context)    {}
+func (NoOpEnergySource) Stop()                    {}
 func (NoOpEnergySource) GetGridPowerW() float64          { return 0 }
 func (NoOpEnergySource) GetSolarPowerW() float64         { return 0 }
 func (NoOpEnergySource) GetConsumptionPowerW() float64   { return 0 }

@@ -22,6 +22,16 @@ func newEntityState(state string) []byte {
 	return body
 }
 
+func newEntityStateWithUnit(state, unit string) []byte {
+	body, _ := json.Marshal(map[string]any{
+		"state": state,
+		"attributes": map[string]string{
+			"unit_of_measurement": unit,
+		},
+	})
+	return body
+}
+
 func TestPoll_SuccessfulResponse(t *testing.T) {
 	var hitCount atomic.Int32
 
@@ -351,4 +361,82 @@ func TestConcurrentAccess(t *testing.T) {
 	<-done
 
 	es.Stop()
+}
+
+func TestPollOnce_UnitConversion(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		state string
+		unit  string
+		want  float64
+	}{
+		{"watts", "2779", "W", 2779},
+		{"kilowatts", "3.953", "kW", 3953},
+		{"kilowatts_lowercase", "3", "kw", 3000},
+		{"kilowatts_padded", "3", " kW ", 3000},
+		{"megawatts", "0.005", "MW", 5000},
+		{"no_unit", "1500", "", 1500},
+		{"unknown_unit_passthrough", "1500", "horses", 1500},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ts := newMockHASServer(t, func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write(newEntityStateWithUnit(tc.state, tc.unit))
+			})
+
+			es := NewEnergySource(
+				HASSConfig{
+					GridEntityID:        "sensor.grid",
+					SolarEntityID:       "sensor.solar",
+					ConsumptionEntityID: "sensor.consumption",
+				},
+				ts.URL,
+				"test-token",
+				nil,
+			)
+			es.pollOnce()
+
+			if got := es.GetGridPowerW(); got != tc.want {
+				t.Errorf("GetGridPowerW() = %f, want %f (state=%q unit=%q)", got, tc.want, tc.state, tc.unit)
+			}
+			if got := es.GetSolarPowerW(); got != tc.want {
+				t.Errorf("GetSolarPowerW() = %f, want %f", got, tc.want)
+			}
+			if got := es.GetConsumptionPowerW(); got != tc.want {
+				t.Errorf("GetConsumptionPowerW() = %f, want %f", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeToWatts(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		value float64
+		unit  string
+		want  float64
+	}{
+		{2779, "W", 2779},
+		{2779, "w", 2779},
+		{3.953, "kW", 3953},
+		{3.953, "KW", 3953},
+		{3.953, " kW ", 3953},
+		{0.005, "MW", 5000},
+		{1500, "", 1500},
+		{1500, "horses", 1500},
+		{-0.001, "kW", -1},
+		{0, "kW", 0},
+	}
+
+	for _, tc := range cases {
+		if got := normalizeToWatts(tc.value, tc.unit); got != tc.want {
+			t.Errorf("normalizeToWatts(%v, %q) = %v, want %v", tc.value, tc.unit, got, tc.want)
+		}
+	}
 }

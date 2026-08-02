@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Fix smart charging never working — chargers stayed at minimum current (6A) with "energy data stale" warnings even when solar surplus was available
+- Fix solar and consumption sensors reporting in kW (e.g. Enphase Envoy) being treated as watts — readings are now auto-converted so surplus calculations are correct
+
 ## 0.1.22
 
 - Position as HA add-on only — remove standalone deployment from README and docs

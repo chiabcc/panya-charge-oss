@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,24 @@ type HASSConfig struct {
 
 type stateResponse struct {
 	State string `json:"state"`
+	Attributes struct {
+		UnitOfMeasurement string `json:"unit_of_measurement"`
+	} `json:"attributes"`
+}
+
+// normalizeToWatts scales W/kW/MW to watts. Unknown or empty units pass through
+// unchanged (assumed already watts) to preserve backward compatibility.
+func normalizeToWatts(value float64, unit string) float64 {
+	switch strings.ToLower(strings.TrimSpace(unit)) {
+	case "", "w":
+		return value
+	case "kw":
+		return value * 1_000
+	case "mw":
+		return value * 1_000_000
+	default:
+		return value
+	}
 }
 
 type EnergySource struct {
@@ -147,6 +166,16 @@ func (e *EnergySource) pollEntity(entityID, entityType string) {
 		e.logger.Debug("ha energy: non-numeric state value",
 			"entity_id", entityID, "state", state.State)
 		return
+	}
+
+	if norm := normalizeToWatts(powerW, state.Attributes.UnitOfMeasurement); norm != powerW {
+		e.logger.Debug("ha energy: normalized unit to watts",
+			"entity_id", entityID,
+			"state", state.State,
+			"unit", state.Attributes.UnitOfMeasurement,
+			"watts", norm,
+		)
+		powerW = norm
 	}
 
 	switch entityType {

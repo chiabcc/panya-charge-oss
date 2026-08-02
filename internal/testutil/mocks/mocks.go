@@ -554,12 +554,15 @@ type MockEnergySource struct {
 	GridStale         bool
 	SolarAvail        bool
 	ConsumptionAvail  bool
+	Started           bool
 }
 
 func NewMockEnergySource() *MockEnergySource {
 	return &MockEnergySource{}
 }
 
+func (m *MockEnergySource) Start(context.Context) { m.Started = true }
+func (m *MockEnergySource) Stop()                 {}
 func (m *MockEnergySource) GetGridPowerW() float64                      { return m.GridPowerW }
 func (m *MockEnergySource) GetSolarPowerW() float64                     { return m.SolarPowerW }
 func (m *MockEnergySource) GetConsumptionPowerW() float64               { return m.ConsumptionPowerW }

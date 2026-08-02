@@ -203,6 +203,7 @@ func (c *CSMS) Start(ctx context.Context) error {
 	c.publisher.PublishGlobalDiscovery()
 	c.publisher.PublishSmartChargingEnabled(c.controller.IsEnabled())
 
+	c.energy.Start(ctx)
 	c.server.Start()
 
 	c.wg.Add(1)
@@ -219,9 +220,7 @@ func (c *CSMS) Stop() {
 	if c.cancelFn != nil {
 		c.cancelFn()
 	}
-	if hs, ok := c.energy.(*iha.EnergySource); ok {
-		hs.Stop()
-	}
+	c.energy.Stop()
 	c.server.Stop()
 	if c.subscriber != nil {
 		c.subscriber.Close()
