@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4
+
+- Fix smart charging still failing with 401 Unauthorized — earlier release used the wrong add-on manifest field (`homeassistant: true`, which is for pinning HA Core version, not for granting API access). Correct field is `homeassistant_api: true` which enables the HA REST API proxy at http://supervisor/core/api
+
 ## 0.2.3
 
 ### Bug Fixes
