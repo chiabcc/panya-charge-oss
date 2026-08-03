@@ -143,6 +143,16 @@ func (c *Controller) IsManualOverride(chargerID string) bool {
 	return ok
 }
 
+// LastSetAmps returns the last current limit (A) sent to a connector, or 0 if
+// the controller has not yet sent a profile for it.
+func (c *Controller) LastSetAmps(chargerID string, connectorID int) int {
+	key := fmt.Sprintf("%s:%d", chargerID, connectorID)
+	if prev, ok := c.lastSetAmps.Load(key); ok {
+		return prev.(int)
+	}
+	return 0
+}
+
 func (c *Controller) emit(ev csms.Event) {
 	if c.emitter == nil {
 		return

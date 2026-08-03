@@ -299,6 +299,16 @@ func (c *CSMS) Chargers() []pkgcsms.ChargerInfo {
 			info.TxID = active.TransactionID
 		}
 
+		info.LimitAmps = c.controller.LastSetAmps(ch.ID, info.ConnectorID)
+
+		recent, _ := c.meterRepo.GetMeterValues(ctx, ch.ID, time.Now().Add(-2*time.Minute), time.Now())
+		for i := len(recent) - 1; i >= 0; i-- {
+			if recent[i].Measurand == "Power.Active.Import" {
+				info.ChargingPower = recent[i].Value
+				break
+			}
+		}
+
 		result = append(result, info)
 	}
 
