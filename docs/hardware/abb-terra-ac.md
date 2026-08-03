@@ -68,6 +68,20 @@ startPeriod = 0
 limit = min(ideal_amps, max_amps)
 ```
 
+### Mid-Session Profile Updates (TxProfile)
+
+**Confirmed on real ABB Terra AC hardware:** `SetChargingProfile` with `purpose=TxDefaultProfile` is accepted by the charger mid-session but is **NOT applied** to the ongoing transaction. The charger only applies the TxDefaultProfile that was current when the transaction started.
+
+**Workaround implemented in the CSMS:** When a connector has an active transaction, the CSMS sends **two** charging profiles:
+1. `TxDefaultProfile` — persists the new limit for future transactions (unchanged behavior).
+2. `TxProfile` with `transactionId` set to the active session's OCPP transaction ID — modifies the live transaction's current limit immediately.
+
+If the charger rejects the TxProfile (e.g., firmware doesn't support it), the CSMS logs a warning but does NOT fail the call — the TxDefaultProfile was already accepted and will apply on the next transaction:
+
+```
+level=WARN msg="txProfile not applied — charger may not support modifying live transactions" charger=... connector=... transactionId=... err=...
+```
+
 ## Safety Considerations
 
 ### Contactor Protection

@@ -28,3 +28,23 @@ func buildTxDefaultProfile(connectorID, limitAmps int) *types.ChargingProfile {
 		schedule,
 	)
 }
+
+// buildTxProfile builds a TxProfile charging profile for modifying a live
+// transaction. Same schedule shape as buildTxDefaultProfile but with
+// purpose=TxProfile and the transaction ID set.
+func buildTxProfile(limitAmps, transactionID int) *types.ChargingProfile {
+	stackLevel := abbTxDefaultStackLevel
+
+	period := types.NewChargingSchedulePeriod(0, float64(limitAmps))
+	schedule := types.NewChargingSchedule(types.ChargingRateUnitAmperes, period)
+
+	profile := types.NewChargingProfile(
+		abbProfileID,
+		stackLevel,
+		types.ChargingProfilePurposeTxProfile,
+		abbProfileKind,
+		schedule,
+	)
+	profile.TransactionId = transactionID
+	return profile
+}

@@ -118,7 +118,7 @@ func New(cfg config.Config) (*CSMS, error) {
 		return nil, fmt.Errorf("ocpp server: %w", err)
 	}
 
-	commander := ocpp.NewCommander(server.CentralSystem(), logger)
+	commander := ocpp.NewCommander(server.CentralSystem(), sessionRepo, logger)
 
 	calc := smartcharging.NewCalculator(cfg.Charging.MinAmps, cfg.Charging.MaxAmps, gridVoltage)
 
@@ -436,6 +436,9 @@ func (b *cmdBridge) applyAmps(ctx context.Context, chargerID string, amps int) {
 	}
 	if sent && b.controller != nil {
 		b.controller.SetManualOverride(chargerID)
+	}
+	if sent && b.publisher != nil {
+		b.publisher.PublishChargerCurrent(chargerID, amps)
 	}
 }
 

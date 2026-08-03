@@ -1,33 +1,47 @@
 package ocpp
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/xBlaz3kx/ocpp-go/ocpp1.6"
 	"github.com/xBlaz3kx/ocpp-go/ocpp1.6/core"
 	"github.com/xBlaz3kx/ocpp-go/ocpp1.6/smartcharging"
 	"github.com/xBlaz3kx/ocpp-go/ocpp1.6/types"
+
+	"github.com/chiabcc/panya-charge-oss/internal/domain/ports"
 )
+
+// chargingProfileSender is a narrow interface covering the OCPP commands
+// the Commander actually invokes, avoiding the need to stub ~40 methods
+// from the full ocpp16.CentralSystem in tests.
+type chargingProfileSender interface {
+	SetChargingProfile(clientID string, callback func(*smartcharging.SetChargingProfileConfirmation, error), connectorID int, chargingProfile *types.ChargingProfile, props ...func(request *smartcharging.SetChargingProfileRequest)) error
+	RemoteStartTransaction(clientID string, callback func(*core.RemoteStartTransactionConfirmation, error), idTag string, props ...func(request *core.RemoteStartTransactionRequest)) error
+	RemoteStopTransaction(clientID string, callback func(*core.RemoteStopTransactionConfirmation, error), transactionID int, props ...func(request *core.RemoteStopTransactionRequest)) error
+	ClearChargingProfile(clientID string, callback func(*smartcharging.ClearChargingProfileConfirmation, error), props ...func(request *smartcharging.ClearChargingProfileRequest)) error
+}
 
 const commandTimeout = 15 * time.Second
 
 const defaultContactorCooldown = 180 * time.Second
 
 type Commander struct {
-	cs              ocpp16.CentralSystem
-	logger          *slog.Logger
-	mu              sync.Mutex
+	cs                chargingProfileSender
+	logger            *slog.Logger
+	sessionRepo       ports.SessionRepository
+	mu                sync.Mutex
 	contactorCooldown time.Duration
-	lastStartStop   map[string]time.Time
+	lastStartStop     map[string]time.Time
 }
 
-func NewCommander(cs ocpp16.CentralSystem, logger *slog.Logger) *Commander {
+func NewCommander(cs chargingProfileSender, sessionRepo ports.SessionRepository, logger *slog.Logger) *Commander {
 	return &Commander{
 		cs:                cs,
 		logger:            logger,
+		sessionRepo:       sessionRepo,
 		contactorCooldown: defaultContactorCooldown,
 		lastStartStop:     make(map[string]time.Time),
 	}
@@ -59,7 +73,29 @@ func (c *Commander) markStartStop(chargerID string) {
 }
 
 func (c *Commander) SetChargingProfile(chargerID string, connectorID, limitAmps int) error {
-	profile := buildTxDefaultProfile(connectorID, limitAmps)
+	if err := c.sendChargingProfile(chargerID, connectorID, buildTxDefaultProfile(connectorID, limitAmps)); err != nil {
+		return err
+	}
+
+	if connectorID <= 0 || c.sessionRepo == nil {
+		return nil
+	}
+
+	session, err := c.sessionRepo.GetActiveSession(context.Background(), chargerID, connectorID)
+	if err != nil || session == nil {
+		return nil
+	}
+
+	txProfile := buildTxProfile(limitAmps, session.TransactionID)
+	if sendErr := c.sendChargingProfile(chargerID, connectorID, txProfile); sendErr != nil {
+		c.logger.Warn("txProfile not applied — charger may not support modifying live transactions",
+			"charger", chargerID, "connector", connectorID, "transactionId", session.TransactionID, "err", sendErr)
+	}
+
+	return nil
+}
+
+func (c *Commander) sendChargingProfile(chargerID string, connectorID int, profile *types.ChargingProfile) error {
 	errCh := make(chan error, 1)
 
 	err := c.cs.SetChargingProfile(chargerID, func(conf *smartcharging.SetChargingProfileConfirmation, err error) {
