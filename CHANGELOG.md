@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8](https://github.com/chiabcc/panya-charge-oss/compare/v0.2.7...v0.2.8) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ocpp:** apply current changes to live transactions via TxProfile ([5279345](https://github.com/chiabcc/panya-charge-oss/commit/527934565c529c169a3728bdbe60eb1fd79893ff))
+
 ## [0.2.7](https://github.com/chiabcc/panya-charge-oss/compare/v0.2.6...v0.2.7) (2026-08-03)
 
 
