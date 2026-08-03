@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.7
+
+### Bug Fixes
+
+* **smart-charging:** honor manual charging current set from Home Assistant ([76b1729](https://github.com/chiabcc/panya-charge-oss/commit/76b1729211c4c5d61d64409fcdad8e8d79ab71ba))
+
 ## 0.2.6
 
 - Smooth out smart charging near solar surplus threshold: charger now holds its current limit for 30 seconds before ramping down, and waits 20 seconds of consistent surplus before ramping back up. Prevents charging-current flapping during partly cloudy conditions.
