@@ -337,6 +337,62 @@ func (h *Handler) OnMeterValues(chargePointId string, req *core.MeterValuesReque
 		}
 	}
 
+	// Session recovery: if MeterValues carries a TransactionId but no session
+	// matched (e.g. after a CSMS restart mid-transaction), reconstruct the
+	// session from the charger's state. The charger emits MeterValues every ~10s
+	// during charging, each carrying the active TransactionId.
+	if sessionID == "" && req.TransactionId != nil {
+		existing, err := h.sessionRepo.GetSessionByTransactionID(ctx, chargePointId, *req.TransactionId)
+		if err == nil && existing != nil {
+			sessionID = existing.ID
+		} else if existing == nil {
+			// No session found — recover it.
+			recoveredID := uuid.NewString()
+			meterStart := energyWh
+			if meterStart <= 0 {
+				meterStart = 0
+			}
+			recovered := session.Session{
+				ID:            recoveredID,
+				TransactionID: *req.TransactionId,
+				ChargerID:     chargePointId,
+				ConnectorID:   req.ConnectorId,
+				IDTag:         "recovered",
+				MeterStartWh:  meterStart,
+				StartedAt:     time.Now(),
+			}
+			if err := h.sessionRepo.CreateSession(ctx, recovered); err != nil {
+				h.logger.Error("failed to create recovered session", "err", err, "charger", chargePointId, "tx_id", *req.TransactionId)
+			} else {
+				sessionID = recoveredID
+				h.logger.Info("recovered active session after CSMS restart",
+					"charger", chargePointId,
+					"connector", req.ConnectorId,
+					"tx_id", *req.TransactionId,
+					"session", recoveredID,
+				)
+				conn := charger.Connector{
+					ChargerID:   chargePointId,
+					ConnectorID: req.ConnectorId,
+					Status:      charger.StatusCharging,
+				}
+				if err := h.chargerRepo.UpsertConnector(ctx, conn); err != nil {
+					h.logger.Error("failed to upsert connector status on recovery", "err", err)
+				}
+				h.publisher.PublishChargerStatus(chargePointId, charger.StatusCharging)
+				h.publisher.PublishChargingState(chargePointId, true)
+				h.emit(csms.TransactionStarted{
+					Timestamp:    time.Now(),
+					TxID:         *req.TransactionId,
+					ChargerID:    chargePointId,
+					IDTag:        "recovered",
+					ConnectorID:  req.ConnectorId,
+					MeterStartWh: meterStart,
+				})
+			}
+		}
+	}
+
 	if len(meterValues) > 0 {
 		if err := h.meterRepo.StoreMeterValues(ctx, meterValues); err != nil {
 			h.logger.Error("failed to store meter values", "err", err, "charger", chargePointId)

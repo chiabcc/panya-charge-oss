@@ -503,6 +503,18 @@ func (b *cmdBridge) startCharging(ctx context.Context, chargerID string) {
 		if conn.ConnectorID == 0 {
 			continue
 		}
+		active, err := b.sessionRepo.GetActiveSession(ctx, chargerID, conn.ConnectorID)
+		if err == nil && active != nil && active.TransactionID != 0 {
+			b.logger.Info("charging already active, skipping remote start",
+				"charger", chargerID,
+				"connector", conn.ConnectorID,
+				"tx_id", active.TransactionID,
+			)
+			if b.publisher != nil {
+				b.publisher.PublishChargingState(chargerID, true)
+			}
+			continue
+		}
 		if err := b.commander.RemoteStartTransaction(chargerID, conn.ConnectorID, "default"); err != nil {
 			b.logger.Error("cmd: remote start failed", "charger", chargerID, "err", err)
 		}
