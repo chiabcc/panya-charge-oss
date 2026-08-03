@@ -79,7 +79,7 @@ func (p *Publisher) PublishChargerPower(chargerID string, powerKW float64) {
 }
 
 func (p *Publisher) PublishSessionEnergy(chargerID string, energyKWh float64) {
-	p.publish(fmt.Sprintf("charge/%s/energy", chargerID), fmt.Sprintf("%.3f", energyKWh), false)
+	p.publish(fmt.Sprintf("charge/%s/energy", chargerID), fmt.Sprintf("%.3f", energyKWh), true)
 }
 
 func (p *Publisher) PublishChargerOnline(chargerID string, online bool) {
