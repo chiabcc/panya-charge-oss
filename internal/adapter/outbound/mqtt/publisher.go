@@ -110,6 +110,10 @@ func (p *Publisher) PublishProxyState(chargerID string, connected bool) {
 	p.publish(fmt.Sprintf("charge/%s/proxy_connected", chargerID), val, true)
 }
 
+func (p *Publisher) PublishChargerMode(chargerID, mode string) {
+	p.publish(fmt.Sprintf("charge/%s/mode", chargerID), mode, true)
+}
+
 func (p *Publisher) PublishSmartChargingEnabled(enabled bool) {
 	val := "OFF"
 	if enabled {

@@ -28,6 +28,7 @@ type Controller struct {
 	lastShouldStop sync.Map
 	emitter        EventEmitter
 	enabled        atomic.Bool
+	manualOverride sync.Map // keyed by chargerID; value is struct{}{}
 }
 
 func NewController(
@@ -99,6 +100,47 @@ func (c *Controller) SetEmitter(e EventEmitter) {
 func (c *Controller) SetSafeAmps(amps int) {
 	c.safeAmps.Store(int32(amps))
 	c.logger.Info("controller: safe amps updated", "safeAmps", amps)
+}
+
+// SetManualOverride marks a charger as manually controlled by HA.
+// The smart-charging controller will skip this charger in tick() until
+// the override is explicitly cleared.
+func (c *Controller) SetManualOverride(chargerID string) {
+	c.manualOverride.Store(chargerID, struct{}{})
+	c.logger.Debug("manual override set", "charger", chargerID)
+	if c.publisher != nil {
+		c.publisher.PublishChargerMode(chargerID, "manual")
+	}
+}
+
+// ClearManualOverride removes the manual override for a single charger.
+func (c *Controller) ClearManualOverride(chargerID string) {
+	c.manualOverride.Delete(chargerID)
+	c.logger.Debug("manual override cleared", "charger", chargerID)
+	if c.publisher != nil {
+		c.publisher.PublishChargerMode(chargerID, "auto")
+	}
+}
+
+// ClearAllManualOverrides clears all per-charger overrides.
+func (c *Controller) ClearAllManualOverrides() {
+	if c.publisher != nil {
+		c.manualOverride.Range(func(key, _ any) bool {
+			c.publisher.PublishChargerMode(key.(string), "auto")
+			return true
+		})
+	}
+	c.manualOverride.Range(func(key, _ any) bool {
+		c.manualOverride.Delete(key)
+		return true
+	})
+	c.logger.Info("all manual overrides cleared")
+}
+
+// IsManualOverride reports whether a charger is under manual override.
+func (c *Controller) IsManualOverride(chargerID string) bool {
+	_, ok := c.manualOverride.Load(chargerID)
+	return ok
 }
 
 func (c *Controller) emit(ev csms.Event) {
@@ -191,6 +233,9 @@ func (c *Controller) warnSensorDrift(sample smartcharging.MeterSample) {
 }
 
 func (c *Controller) processCharger(ctx context.Context, ch charger.Charger, sample smartcharging.MeterSample, surplusW float64) {
+	if c.IsManualOverride(ch.ID) {
+		return
+	}
 	conns, err := c.chargerRepo.ListConnectors(ctx, ch.ID)
 	if err != nil {
 		c.logger.Error("failed to list connectors", "err", err, "charger", ch.ID)
@@ -225,15 +270,27 @@ func (c *Controller) processConnector(ch charger.Charger, conn charger.Connector
 	}
 
 	if result.ShouldStop {
+		safeAmps := int(c.safeAmps.Load())
+		if prev, ok := c.lastSetAmps.Load(key); ok && abs(safeAmps-prev.(int)) < 1 {
+			c.logger.Debug("skipping safe SetChargingProfile — unchanged",
+				"charger", ch.ID,
+				"connector", conn.ConnectorID,
+				"safeAmps", safeAmps,
+			)
+			return
+		}
 		c.logger.Info("insufficient surplus — safe state",
 			"charger", ch.ID,
 			"connector", conn.ConnectorID,
 			"limit", c.safeAmps.Load(),
 		)
-		if err := c.commander.SetChargingProfile(ch.ID, conn.ConnectorID, int(c.safeAmps.Load())); err != nil {
+		if err := c.commander.SetChargingProfile(ch.ID, conn.ConnectorID, safeAmps); err != nil {
 			c.logger.Error("failed to set safe profile", "err", err, "charger", ch.ID)
-		} else if c.publisher != nil {
-			c.publisher.PublishChargerCurrent(ch.ID, int(c.safeAmps.Load()))
+		} else {
+			c.lastSetAmps.Store(key, safeAmps)
+			if c.publisher != nil {
+				c.publisher.PublishChargerCurrent(ch.ID, safeAmps)
+			}
 		}
 		return
 	}
@@ -281,6 +338,7 @@ func abs(x int) int {
 }
 
 func (c *Controller) revertAllToSafe(ctx context.Context) {
+	safeAmps := int(c.safeAmps.Load())
 	chargers, err := c.chargerRepo.ListChargers(ctx)
 	if err != nil {
 		c.logger.Error("failed to list chargers for safe revert", "err", err)
@@ -300,11 +358,18 @@ func (c *Controller) revertAllToSafe(ctx context.Context) {
 			if conn.Status != "Charging" && conn.Status != "SuspendedEVSE" {
 				continue
 			}
-			if err := c.commander.SetChargingProfile(ch.ID, conn.ConnectorID, int(c.safeAmps.Load())); err != nil {
+			key := fmt.Sprintf("%s:%d", ch.ID, conn.ConnectorID)
+			if prev, ok := c.lastSetAmps.Load(key); ok && abs(safeAmps-prev.(int)) < 1 {
+				continue
+			}
+			if err := c.commander.SetChargingProfile(ch.ID, conn.ConnectorID, safeAmps); err != nil {
 				c.logger.Error("failed to set safe profile (stale revert)",
 					"err", err, "charger", ch.ID, "connector", conn.ConnectorID)
-			} else if c.publisher != nil {
-				c.publisher.PublishChargerCurrent(ch.ID, int(c.safeAmps.Load()))
+			} else {
+				c.lastSetAmps.Store(key, safeAmps)
+				if c.publisher != nil {
+					c.publisher.PublishChargerCurrent(ch.ID, safeAmps)
+				}
 			}
 		}
 	}

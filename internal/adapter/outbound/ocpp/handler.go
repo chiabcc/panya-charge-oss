@@ -27,6 +27,11 @@ type ChargerRelayHook interface {
 	Disconnect(chargerID string)
 }
 
+// OverrideClearer exposes manual-override clearing for the controller.
+type OverrideClearer interface {
+	ClearManualOverride(chargerID string)
+}
+
 type LiveBroadcaster interface {
 	UpdateMeter(chargerID string, powerW, energyKWh, currentA float64)
 	PublishStatus(chargerID, status string)
@@ -72,6 +77,7 @@ type Handler struct {
 	broadcaster     LiveBroadcaster
 	ocppBroker      OcppMessageBroker
 	emitter         EventEmitter
+	overrideClearer OverrideClearer
 	ampMu           sync.RWMutex
 	minAmps         int
 	maxAmps         int
@@ -107,6 +113,12 @@ func NewHandler(
 		logger:          logger,
 		metrics:         metrics,
 	}
+}
+
+// SetOverrideClearer wires the controller's override clearing into the handler
+// so that StopTransaction and Disconnect events can lift manual overrides.
+func (h *Handler) SetOverrideClearer(oc OverrideClearer) {
+	h.overrideClearer = oc
 }
 
 func (h *Handler) SetLiveBroadcaster(b LiveBroadcaster) {
@@ -499,6 +511,9 @@ func (h *Handler) OnStopTransaction(chargePointId string, req *core.StopTransact
 	}
 
 	h.recordInbound("StopTransaction", start, nil)
+	if h.overrideClearer != nil {
+		h.overrideClearer.ClearManualOverride(chargePointId)
+	}
 	h.emit(csms.TransactionStopped{
 		Timestamp:   time.Now(),
 		TxID:        req.TransactionId,
@@ -553,6 +568,10 @@ func (h *Handler) OnDisconnect(chargePointID string) {
 	h.logger.Warn("charger disconnected", "charger", chargePointID)
 	if h.metrics != nil {
 		h.metrics.RecordChargerDisconnected()
+	}
+
+	if h.overrideClearer != nil {
+		h.overrideClearer.ClearManualOverride(chargePointID)
 	}
 
 	if h.relayHook != nil {

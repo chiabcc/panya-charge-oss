@@ -65,6 +65,7 @@ type EventPublisher interface {
 	PublishChargerCurrent(chargerID string, amps int)
 	PublishChargingState(chargerID string, charging bool)
 	PublishProxyState(chargerID string, connected bool)
+	PublishChargerMode(chargerID string, mode string)
 	PublishSmartChargingEnabled(enabled bool)
 }
 
@@ -78,6 +79,7 @@ type DiscoveryPublisher interface {
 type CommandReceiver interface {
 	OnSetAmps(chargerID string, amps int)
 	OnSetState(chargerID string, charging bool)
+	OnSetChargingMode(chargerID string, manual bool)
 	OnSetSmartCharging(enabled bool)
 }
 

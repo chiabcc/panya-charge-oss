@@ -13,6 +13,7 @@ import (
 type CommandHandler interface {
 	OnSetAmps(chargerID string, amps int)
 	OnSetState(chargerID string, charging bool)
+	OnSetChargingMode(chargerID string, manual bool)
 	OnSetSmartCharging(enabled bool)
 }
 
@@ -77,6 +78,7 @@ func (s *Subscriber) subscribe(c mqtt.Client) error {
 		{s.fullTopic(s.topics["smart_charging_command"]), s.handleSmartChargingCommand},
 		{s.baseTopic + "/charge/+/command/set_amps", s.handleSetAmpsPerCharger},
 		{s.baseTopic + "/charge/+/command/state", s.handleSetStatePerCharger},
+		{s.baseTopic + "/charge/+/command/mode", s.handleModePerCharger},
 	}
 
 	for _, sub := range subs {
@@ -143,6 +145,26 @@ func (s *Subscriber) handleSetStatePerCharger(_ mqtt.Client, msg mqtt.Message) {
 	charging := payload == "1" || payload == "true" || payload == "ON" || payload == "start"
 	if s.cmdHandler != nil {
 		s.cmdHandler.OnSetState(chargerID, charging)
+	}
+}
+
+func (s *Subscriber) handleModePerCharger(_ mqtt.Client, msg mqtt.Message) {
+	chargerID := extractChargerID(msg.Topic(), s.baseTopic)
+	if chargerID == "" {
+		return
+	}
+	payload := strings.TrimSpace(string(msg.Payload()))
+	switch payload {
+	case "manual":
+		if s.cmdHandler != nil {
+			s.cmdHandler.OnSetChargingMode(chargerID, true)
+		}
+	case "auto":
+		if s.cmdHandler != nil {
+			s.cmdHandler.OnSetChargingMode(chargerID, false)
+		}
+	default:
+		s.logger.Warn("invalid mode payload", "charger", chargerID, "payload", payload)
 	}
 }
 

@@ -80,6 +80,20 @@ type haBinarySensorConfig struct {
 	DeviceClass         string   `json:"device_class"`
 }
 
+type haSelectConfig struct {
+	Name                string   `json:"name"`
+	StateTopic          string   `json:"state_topic"`
+	CommandTopic        string   `json:"command_topic"`
+	UniqueID            string   `json:"unique_id"`
+	Device              haDevice `json:"device"`
+	AvailabilityTopic   string   `json:"availability_topic,omitempty"`
+	PayloadAvailable    string   `json:"payload_available,omitempty"`
+	PayloadNotAvailable string   `json:"payload_not_available,omitempty"`
+	Options             []string `json:"options"`
+	Icon                string   `json:"icon,omitempty"`
+	EntityCategory      string   `json:"entity_category,omitempty"`
+}
+
 type discoveryPayload struct {
 	topic   string
 	payload any
@@ -161,6 +175,15 @@ func buildDiscoveryPayloads(c charger.Charger, baseTopic, gridTopic string, minA
 				UniqueID: nodeID + "-charging",
 				Device:   device, AvailabilityTopic: availTopic, PayloadAvailable: avail, PayloadNotAvailable: notAvail,
 				PayloadOn: "start", PayloadOff: "stop", StateOn: "1", StateOff: "0", Icon: "mdi:power-plug", EntityCategory: "config",
+			},
+		},
+		{
+			discoveryTopic("select", "charging_mode"),
+			haSelectConfig{
+				Name: "Charging Mode", StateTopic: topic("mode"), CommandTopic: topic("command/mode"),
+				UniqueID: nodeID + "-charging-mode",
+				Device:   device, AvailabilityTopic: availTopic, PayloadAvailable: avail, PayloadNotAvailable: notAvail,
+				Options: []string{"auto", "manual"}, Icon: "mdi:cog", EntityCategory: "config",
 			},
 		},
 	}
@@ -248,6 +271,8 @@ func (p *Publisher) PublishDiscovery(c charger.Charger, minAmps, maxAmps int, pr
 	for _, dp := range payloads {
 		p.client.Publish(dp.topic, 1, true, dp.encode())
 	}
+
+	p.PublishChargerMode(c.ID, "auto")
 
 	p.logger.Info("published HA discovery",
 		"charger", c.ID,

@@ -20,8 +20,8 @@ func TestDiscoveryPayloadCount(t *testing.T) {
 	for _, dp := range payloads {
 		components[dp.topic] = true
 	}
-	if len(components) != 6 {
-		t.Errorf("expected 6 unique topics, got %d", len(components))
+	if len(components) != 7 {
+		t.Errorf("expected 7 unique topics, got %d", len(components))
 	}
 }
 
@@ -36,6 +36,7 @@ func TestDiscoveryTopics(t *testing.T) {
 		"homeassistant/sensor/panya-charge-evse-01/grid_power/config",
 		"homeassistant/number/panya-charge-evse-01/current/config",
 		"homeassistant/switch/panya-charge-evse-01/charging/config",
+		"homeassistant/select/panya-charge-evse-01/charging_mode/config",
 	}
 
 	topics := make(map[string]bool)
@@ -114,7 +115,8 @@ func TestDiscoveryUniqueIDs(t *testing.T) {
 		"homeassistant/sensor/panya-charge-abb-001/grid_power/config": "panya-charge-abb-001-grid-power",
 		"homeassistant/number/panya-charge-abb-001/current/config":    "panya-charge-abb-001-current",
 		"homeassistant/switch/panya-charge-abb-001/charging/config":   "panya-charge-abb-001-charging",
-	}
+		"homeassistant/select/panya-charge-abb-001/charging_mode/config": "panya-charge-abb-001-charging-mode",
+}
 
 	for _, dp := range payloads {
 		var cfg map[string]any
@@ -286,8 +288,8 @@ func TestDiscoveryProxySensorEnabled(t *testing.T) {
 	c := charger.Charger{ID: "ABB-001"}
 	payloads := buildDiscoveryPayloads(c, "panya", "panya/grid/power", 6, 32, true)
 
-	if len(payloads) != 7 {
-		t.Fatalf("expected 7 discovery payloads with proxy enabled, got %d", len(payloads))
+	if len(payloads) != 8 {
+		t.Fatalf("expected 8 discovery payloads with proxy enabled, got %d", len(payloads))
 	}
 
 	found := false
@@ -329,8 +331,8 @@ func TestDiscoveryProxySensorDisabled(t *testing.T) {
 	c := charger.Charger{ID: "ABB-001"}
 	payloads := buildDiscoveryPayloads(c, "panya", "panya/grid/power", 6, 32, false)
 
-	if len(payloads) != 6 {
-		t.Fatalf("expected 6 discovery payloads with proxy disabled, got %d", len(payloads))
+	if len(payloads) != 7 {
+		t.Fatalf("expected 7 discovery payloads with proxy disabled, got %d", len(payloads))
 	}
 
 	for _, dp := range payloads {

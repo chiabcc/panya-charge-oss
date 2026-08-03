@@ -139,6 +139,7 @@ func New(cfg config.Config) (*CSMS, error) {
 		logger,
 	)
 	controller.SetEmitter(emitter)
+	handler.SetOverrideClearer(controller)
 
 	// Disable smart charging when no energy entities are configured.
 	// NoOpEnergySource reports always-stale, which would cause the controller
@@ -393,6 +394,9 @@ type cmdBridge struct {
 type smartChargingToggle interface {
 	SetEnabled(enabled bool)
 	IsEnabled() bool
+	SetManualOverride(chargerID string)
+	ClearManualOverride(chargerID string)
+	ClearAllManualOverrides()
 }
 
 func (b *cmdBridge) OnSetAmps(chargerID string, amps int) {
@@ -419,13 +423,19 @@ func (b *cmdBridge) applyAmps(ctx context.Context, chargerID string, amps int) {
 		b.logger.Error("cmd: list connectors failed", "charger", chargerID, "err", err)
 		return
 	}
+	sent := false
 	for _, conn := range conns {
 		if conn.ConnectorID == 0 {
 			continue
 		}
 		if err := b.commander.SetChargingProfile(chargerID, conn.ConnectorID, amps); err != nil {
 			b.logger.Error("cmd: set charging profile failed", "charger", chargerID, "err", err)
+		} else {
+			sent = true
 		}
+	}
+	if sent && b.controller != nil {
+		b.controller.SetManualOverride(chargerID)
 	}
 }
 
@@ -461,8 +471,22 @@ func (b *cmdBridge) OnSetSmartCharging(enabled bool) {
 		return
 	}
 	b.controller.SetEnabled(enabled)
+	if enabled {
+		b.controller.ClearAllManualOverrides()
+	}
 	if b.publisher != nil {
 		b.publisher.PublishSmartChargingEnabled(enabled)
+	}
+}
+
+func (b *cmdBridge) OnSetChargingMode(chargerID string, manual bool) {
+	if b.controller == nil {
+		return
+	}
+	if manual {
+		b.controller.SetManualOverride(chargerID)
+	} else {
+		b.controller.ClearManualOverride(chargerID)
 	}
 }
 
