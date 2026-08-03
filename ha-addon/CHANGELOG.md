@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.8
+
+### Bug Fixes
+
+* **ocpp:** apply current changes to live transactions via TxProfile ([5279345](https://github.com/chiabcc/panya-charge-oss/commit/527934565c529c169a3728bdbe60eb1fd79893ff))
+
 ## 0.2.7
 
 ### Bug Fixes
