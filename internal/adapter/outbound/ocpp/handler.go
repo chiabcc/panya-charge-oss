@@ -314,29 +314,6 @@ func (h *Handler) OnMeterValues(chargePointId string, req *core.MeterValuesReque
 		}
 	}
 
-	var meterValues []ports.MeterValue
-	var powerKW, energyWh, currentA float64
-
-	for _, mv := range req.MeterValue {
-		ts := time.Now()
-		if mv.Timestamp != nil {
-			ts = mv.Timestamp.Time
-		}
-		for _, sv := range mv.SampledValue {
-			mvals, pwr, enrg, amps := h.parseSampledValue(sv, chargePointId, req.ConnectorId, sessionID, ts)
-			meterValues = append(meterValues, mvals...)
-			if pwr > 0 {
-				powerKW = pwr
-			}
-			if enrg > 0 {
-				energyWh = enrg
-			}
-			if amps > 0 {
-				currentA = amps
-			}
-		}
-	}
-
 	// Session recovery: if MeterValues carries a TransactionId but no session
 	// matched (e.g. after a CSMS restart mid-transaction), reconstruct the
 	// session from the charger's state. The charger emits MeterValues every ~10s
@@ -348,17 +325,12 @@ func (h *Handler) OnMeterValues(chargePointId string, req *core.MeterValuesReque
 		} else if existing == nil {
 			// No session found — recover it.
 			recoveredID := uuid.NewString()
-			meterStart := energyWh
-			if meterStart <= 0 {
-				meterStart = 0
-			}
 			recovered := session.Session{
 				ID:            recoveredID,
 				TransactionID: *req.TransactionId,
 				ChargerID:     chargePointId,
 				ConnectorID:   req.ConnectorId,
 				IDTag:         "recovered",
-				MeterStartWh:  meterStart,
 				StartedAt:     time.Now(),
 			}
 			if err := h.sessionRepo.CreateSession(ctx, recovered); err != nil {
@@ -382,13 +354,35 @@ func (h *Handler) OnMeterValues(chargePointId string, req *core.MeterValuesReque
 				h.publisher.PublishChargerStatus(chargePointId, charger.StatusCharging)
 				h.publisher.PublishChargingState(chargePointId, true)
 				h.emit(csms.TransactionStarted{
-					Timestamp:    time.Now(),
-					TxID:         *req.TransactionId,
-					ChargerID:    chargePointId,
-					IDTag:        "recovered",
-					ConnectorID:  req.ConnectorId,
-					MeterStartWh: meterStart,
+					Timestamp:   time.Now(),
+					TxID:        *req.TransactionId,
+					ChargerID:   chargePointId,
+					IDTag:       "recovered",
+					ConnectorID: req.ConnectorId,
 				})
+			}
+		}
+	}
+
+	var meterValues []ports.MeterValue
+	var powerKW, energyWh, currentA float64
+
+	for _, mv := range req.MeterValue {
+		ts := time.Now()
+		if mv.Timestamp != nil {
+			ts = mv.Timestamp.Time
+		}
+		for _, sv := range mv.SampledValue {
+			mvals, pwr, enrg, amps := h.parseSampledValue(sv, chargePointId, req.ConnectorId, sessionID, ts)
+			meterValues = append(meterValues, mvals...)
+			if pwr > 0 {
+				powerKW = pwr
+			}
+			if enrg > 0 {
+				energyWh = enrg
+			}
+			if amps > 0 {
+				currentA = amps
 			}
 		}
 	}
