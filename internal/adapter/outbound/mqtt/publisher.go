@@ -75,7 +75,7 @@ func (p *Publisher) PublishChargerStatus(chargerID string, status charger.Connec
 }
 
 func (p *Publisher) PublishChargerPower(chargerID string, powerKW float64) {
-	p.publish(fmt.Sprintf("charge/%s/power", chargerID), fmt.Sprintf("%.3f", powerKW), false)
+	p.publish(fmt.Sprintf("charge/%s/power", chargerID), fmt.Sprintf("%.3f", powerKW), true)
 }
 
 func (p *Publisher) PublishSessionEnergy(chargerID string, energyKWh float64) {

@@ -98,7 +98,7 @@ following entities grouped under it.
 |--------|------|------|-------------|
 | Status | sensor | — | Connector status: `Available`, `Preparing`, `Charging`, `SuspendedEV`, `SuspendedEVSE`, `Finishing`, `Faulted` |
 | Charging Power | sensor | kW | Instantaneous charging power (3 decimals) |
-| Session Energy | sensor | kWh | Cumulative energy this session — Energy Dashboard compatible |
+| Charging Energy | sensor | kWh | Cumulative charging energy — Energy Dashboard compatible |
 | Grid Power | sensor | W | Grid net power (negative = exporting to grid) |
 | Solar Power | sensor | W | Solar production *(only if `solar_entity_id` configured)* |
 | Home Consumption | sensor | W | Whole-home consumption *(only if `consumption_entity_id` configured)* |
@@ -118,14 +118,14 @@ the device as unavailable when the charger disconnects from the CSMS.
 
 ## Energy Dashboard
 
-The **Session Energy** sensor has `state_class: total_increasing`, making it
+The **Charging Energy** sensor has `state_class: total_increasing`, making it
 compatible with HA's Energy Dashboard.
 
 To add your charger's energy consumption to the dashboard:
 
 1. Go to **Settings → Energy**
 2. Under **Electricity grid**, click **Add consumption**
-3. Select the charger's **Session Energy** sensor
+3. Select the charger's **Charging Energy** sensor
 4. (Optional) Under **Solar production**, add your solar production sensor for net calculation
 
 This gives you per-charger energy usage alongside your home's overall consumption.
@@ -240,7 +240,7 @@ cards:
       - entity: sensor.abb_001243_charging_power
         name: Power
       - entity: sensor.abb_001243_session_energy
-        name: Session Energy
+        name: Charging Energy
       - type: divider
       - entity: number.abb_001243_charging_current
         name: Current Limit

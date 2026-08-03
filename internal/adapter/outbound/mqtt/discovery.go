@@ -145,7 +145,7 @@ func buildDiscoveryPayloads(c charger.Charger, baseTopic, gridTopic string, minA
 		{
 			discoveryTopic("sensor", "energy"),
 			haSensorConfig{
-				Name: "Session Energy", StateTopic: topic("energy"), UniqueID: nodeID + "-energy",
+				Name: "Charging Energy", StateTopic: topic("energy"), UniqueID: nodeID + "-energy",
 				Device: device, AvailabilityTopic: availTopic, PayloadAvailable: avail, PayloadNotAvailable: notAvail,
 				DeviceClass: "energy", StateClass: "total_increasing", UnitOfMeasurement: "kWh", Icon: "mdi:counter",
 			},
