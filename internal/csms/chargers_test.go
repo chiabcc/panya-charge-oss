@@ -48,7 +48,7 @@ func TestChargers_PopulatesPowerAndLimit(t *testing.T) {
 	pub := mocks.NewMockEventPublisher()
 	calc := smartcharging.NewCalculator(6, 32, 230.0)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	controller := ocpp.NewController(cmd, chargerRepo, grid, pub, calc, 6, 10*time.Millisecond, 60*time.Second, logger)
+	controller := ocpp.NewController(cmd, chargerRepo, sessionRepo, grid, pub, calc, 6, 10*time.Millisecond, 60*time.Second, logger)
 
 	runCtx, runCancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	controller.Run(runCtx)
@@ -98,7 +98,7 @@ func TestChargers_NoMeterData_PowerZero(t *testing.T) {
 		sessionRepo: sessionRepo,
 		meterRepo:   meterRepo,
 		controller: ocpp.NewController(
-			mocks.NewMockChargerCommander(), chargerRepo,
+			mocks.NewMockChargerCommander(), chargerRepo, sessionRepo,
 			mocks.NewMockEnergySource(), mocks.NewMockEventPublisher(),
 			smartcharging.NewCalculator(6, 32, 230.0), 6,
 			10*time.Millisecond, 60*time.Second,

@@ -15,6 +15,7 @@ type CommandHandler interface {
 	OnSetState(chargerID string, charging bool)
 	OnSetChargingMode(chargerID string, manual bool)
 	OnSetSmartCharging(enabled bool)
+	OnSetSolarThreshold(chargerID string, watts int)
 }
 
 type Subscriber struct {
@@ -79,6 +80,7 @@ func (s *Subscriber) subscribe(c mqtt.Client) error {
 		{s.baseTopic + "/charge/+/command/set_amps", s.handleSetAmpsPerCharger},
 		{s.baseTopic + "/charge/+/command/state", s.handleSetStatePerCharger},
 		{s.baseTopic + "/charge/+/command/mode", s.handleModePerCharger},
+		{s.baseTopic + "/charge/+/command/solar_threshold", s.handleSolarThresholdPerCharger},
 	}
 
 	for _, sub := range subs {
@@ -165,6 +167,21 @@ func (s *Subscriber) handleModePerCharger(_ mqtt.Client, msg mqtt.Message) {
 		}
 	default:
 		s.logger.Warn("invalid mode payload", "charger", chargerID, "payload", payload)
+	}
+}
+
+func (s *Subscriber) handleSolarThresholdPerCharger(_ mqtt.Client, msg mqtt.Message) {
+	chargerID := extractChargerID(msg.Topic(), s.baseTopic)
+	if chargerID == "" {
+		return
+	}
+	watts, err := strconv.Atoi(string(msg.Payload()))
+	if err != nil {
+		s.logger.Warn("invalid solar_threshold payload", "payload", string(msg.Payload()), "err", err)
+		return
+	}
+	if s.cmdHandler != nil {
+		s.cmdHandler.OnSetSolarThreshold(chargerID, watts)
 	}
 }
 

@@ -126,6 +126,10 @@ func (p *Publisher) PublishSmartChargingEnabled(enabled bool) {
 	p.publish("smart_charging/state", val, true)
 }
 
+func (p *Publisher) PublishSolarThreshold(chargerID string, watts int) {
+	p.publish(fmt.Sprintf("charge/%s/solar_threshold", chargerID), strconv.Itoa(watts), true)
+}
+
 func (p *Publisher) Subscribe(topic string, handler mqtt.MessageHandler) error {
 	fullTopic := fmt.Sprintf("%s/%s", p.baseTopic, topic)
 	if token := p.client.Subscribe(fullTopic, 1, handler); token.Wait() && token.Error() != nil {

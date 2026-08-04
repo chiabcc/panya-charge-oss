@@ -20,8 +20,8 @@ func TestDiscoveryPayloadCount(t *testing.T) {
 	for _, dp := range payloads {
 		components[dp.topic] = true
 	}
-	if len(components) != 8 {
-		t.Errorf("expected 8 unique topics, got %d", len(components))
+	if len(components) != 9 {
+		t.Errorf("expected 9 unique topics, got %d", len(components))
 	}
 }
 
@@ -117,7 +117,8 @@ func TestDiscoveryUniqueIDs(t *testing.T) {
 		"homeassistant/number/panya-charge-abb-001/current/config":    "panya-charge-abb-001-current",
 		"homeassistant/switch/panya-charge-abb-001/charging/config":   "panya-charge-abb-001-charging",
 		"homeassistant/select/panya-charge-abb-001/charging_mode/config": "panya-charge-abb-001-charging-mode",
-}
+		"homeassistant/number/panya-charge-abb-001/solar_threshold/config": "panya-charge-abb-001-solar-threshold",
+	}
 
 	for _, dp := range payloads {
 		var cfg map[string]any
@@ -289,8 +290,8 @@ func TestDiscoveryProxySensorEnabled(t *testing.T) {
 	c := charger.Charger{ID: "ABB-001"}
 	payloads := buildDiscoveryPayloads(c, "panya", "panya/grid/power", 6, 32, true)
 
-	if len(payloads) != 9 {
-		t.Fatalf("expected 9 discovery payloads with proxy enabled, got %d", len(payloads))
+	if len(payloads) != 10 {
+		t.Fatalf("expected 10 discovery payloads with proxy enabled, got %d", len(payloads))
 	}
 
 	found := false
@@ -332,8 +333,8 @@ func TestDiscoveryProxySensorDisabled(t *testing.T) {
 	c := charger.Charger{ID: "ABB-001"}
 	payloads := buildDiscoveryPayloads(c, "panya", "panya/grid/power", 6, 32, false)
 
-	if len(payloads) != 8 {
-		t.Fatalf("expected 8 discovery payloads with proxy disabled, got %d", len(payloads))
+	if len(payloads) != 9 {
+		t.Fatalf("expected 9 discovery payloads with proxy disabled, got %d", len(payloads))
 	}
 
 	for _, dp := range payloads {

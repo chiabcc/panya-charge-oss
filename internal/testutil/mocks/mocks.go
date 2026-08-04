@@ -360,6 +360,12 @@ type SmartChargingPublish struct {
 	Enabled bool
 }
 
+// SolarThresholdPublish captures a PublishSolarThreshold call.
+type SolarThresholdPublish struct {
+	ChargerID string
+	Watts     int
+}
+
 // ModePublish captures a PublishChargerMode call.
 type ModePublish struct {
 	ChargerID string
@@ -378,6 +384,7 @@ type MockEventPublisher struct {
 	ProxyPublished         []ProxyStatePublish
 	ModePublished          []ModePublish
 	SmartChargingPublished []SmartChargingPublish
+	SolarThresholdPublished []SolarThresholdPublish
 }
 
 func NewMockEventPublisher() *MockEventPublisher {
@@ -391,6 +398,7 @@ func NewMockEventPublisher() *MockEventPublisher {
 		ProxyPublished:         make([]ProxyStatePublish, 0),
 		ModePublished:          make([]ModePublish, 0),
 		SmartChargingPublished: make([]SmartChargingPublish, 0),
+		SolarThresholdPublished: make([]SolarThresholdPublish, 0),
 	}
 }
 
@@ -452,6 +460,12 @@ func (m *MockEventPublisher) PublishSmartChargingEnabled(enabled bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.SmartChargingPublished = append(m.SmartChargingPublished, SmartChargingPublish{Enabled: enabled})
+}
+
+func (m *MockEventPublisher) PublishSolarThreshold(chargerID string, watts int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.SolarThresholdPublished = append(m.SolarThresholdPublished, SolarThresholdPublish{ChargerID: chargerID, Watts: watts})
 }
 
 func (m *MockEventPublisher) LastStatus(chargerID string) (charger.ConnectorStatus, bool) {
@@ -521,6 +535,7 @@ func (m *MockEventPublisher) Reset() {
 	m.ProxyPublished = m.ProxyPublished[:0]
 	m.ModePublished = m.ModePublished[:0]
 	m.SmartChargingPublished = m.SmartChargingPublished[:0]
+	m.SolarThresholdPublished = m.SolarThresholdPublished[:0]
 }
 
 // DiscoveryCall captures a PublishDiscovery call.
@@ -718,6 +733,12 @@ type SetSmartChargingCall struct {
 	Enabled bool
 }
 
+// SetSolarThresholdCall records an OnSetSolarThreshold call.
+type SetSolarThresholdCall struct {
+	ChargerID string
+	Watts     int
+}
+
 // MockCommandReceiver implements ports.CommandReceiver.
 type MockCommandReceiver struct {
 	mu                    sync.Mutex
@@ -725,6 +746,7 @@ type MockCommandReceiver struct {
 	SetStateCalls         []SetStateCall
 	SetModeCalls          []SetModeCall
 	SetSmartChargingCalls []SetSmartChargingCall
+	SetSolarThresholdCalls []SetSolarThresholdCall
 }
 
 func NewMockCommandReceiver() *MockCommandReceiver {
@@ -733,6 +755,7 @@ func NewMockCommandReceiver() *MockCommandReceiver {
 		SetStateCalls:         make([]SetStateCall, 0),
 		SetModeCalls:          make([]SetModeCall, 0),
 		SetSmartChargingCalls: make([]SetSmartChargingCall, 0),
+		SetSolarThresholdCalls: make([]SetSolarThresholdCall, 0),
 	}
 }
 
@@ -760,6 +783,12 @@ func (m *MockCommandReceiver) OnSetSmartCharging(enabled bool) {
 	m.SetSmartChargingCalls = append(m.SetSmartChargingCalls, SetSmartChargingCall{Enabled: enabled})
 }
 
+func (m *MockCommandReceiver) OnSetSolarThreshold(chargerID string, watts int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.SetSolarThresholdCalls = append(m.SetSolarThresholdCalls, SetSolarThresholdCall{ChargerID: chargerID, Watts: watts})
+}
+
 func (m *MockCommandReceiver) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -767,6 +796,7 @@ func (m *MockCommandReceiver) Reset() {
 	m.SetStateCalls = m.SetStateCalls[:0]
 	m.SetModeCalls = m.SetModeCalls[:0]
 	m.SetSmartChargingCalls = m.SetSmartChargingCalls[:0]
+	m.SetSolarThresholdCalls = m.SetSolarThresholdCalls[:0]
 }
 
 type MockProxyConfigRepo struct {

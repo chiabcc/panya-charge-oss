@@ -130,6 +130,7 @@ func New(cfg config.Config) (*CSMS, error) {
 	controller := ocpp.NewController(
 		commander,
 		chargerRepo,
+		sessionRepo,
 		energy,
 		publisher,
 		calc,
@@ -138,6 +139,7 @@ func New(cfg config.Config) (*CSMS, error) {
 		staleTimeout,
 		logger,
 	)
+	controller.SetSolarThreshold(cfg.Charging.SolarThresholdW)
 	controller.SetEmitter(emitter)
 	handler.SetOverrideClearer(controller)
 
@@ -407,6 +409,8 @@ type smartChargingToggle interface {
 	SetManualOverride(chargerID string)
 	ClearManualOverride(chargerID string)
 	ClearAllManualOverrides()
+	SetSolarThreshold(watts int)
+	GetSolarThreshold() int
 }
 
 func (b *cmdBridge) OnSetAmps(chargerID string, amps int) {
@@ -500,6 +504,16 @@ func (b *cmdBridge) OnSetChargingMode(chargerID string, manual bool) {
 		b.controller.SetManualOverride(chargerID)
 	} else {
 		b.controller.ClearManualOverride(chargerID)
+	}
+}
+
+func (b *cmdBridge) OnSetSolarThreshold(chargerID string, watts int) {
+	if b.controller == nil {
+		return
+	}
+	b.controller.SetSolarThreshold(watts)
+	if b.publisher != nil {
+		b.publisher.PublishSolarThreshold(chargerID, watts)
 	}
 }
 

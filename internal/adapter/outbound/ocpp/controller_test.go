@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/chiabcc/panya-charge-oss/internal/domain/charger"
+	"github.com/chiabcc/panya-charge-oss/internal/domain/session"
 	"github.com/chiabcc/panya-charge-oss/internal/domain/smartcharging"
 	"github.com/chiabcc/panya-charge-oss/internal/testutil/mocks"
 )
@@ -15,7 +16,8 @@ import (
 func newTestController(t *testing.T, cmd *mocks.MockChargerCommander, cr *mocks.MockChargerRepository, grid *mocks.MockEnergySource, pub *mocks.MockEventPublisher) *Controller {
 	t.Helper()
 	calc := smartcharging.NewCalculator(6, 32, 230.0)
-	return NewController(cmd, cr, grid, pub, calc, 6, time.Hour, 60*time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	sr := mocks.NewMockSessionRepository()
+	return NewController(cmd, cr, sr, grid, pub, calc, 6, time.Hour, 60*time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func TestController_StaleGridRevertsToSafe(t *testing.T) {
@@ -642,4 +644,203 @@ func TestController_ManualOverrideConcurrent(t *testing.T) {
 	}
 
 	<-done
+}
+
+func TestController_SolarGateStopsBelowThreshold(t *testing.T) {
+	cmd := mocks.NewMockChargerCommander()
+	cr := mocks.NewMockChargerRepository()
+	cr.Chargers["CHG-A"] = charger.Charger{ID: "CHG-A", Online: true}
+	cr.Connectors["CHG-A"] = []charger.Connector{
+		{ChargerID: "CHG-A", ConnectorID: 1, Status: charger.StatusCharging},
+	}
+	sr := mocks.NewMockSessionRepository()
+	sr.Sessions["sess-1"] = session.Session{
+		ID:            "sess-1",
+		TransactionID: 42,
+		ChargerID:     "CHG-A",
+		ConnectorID:   1,
+		StartedAt:     time.Now(),
+	}
+	grid := mocks.NewMockEnergySource()
+	grid.SolarPowerW = 500
+	grid.SolarAvail = true
+	grid.Stale = false
+	pub := mocks.NewMockEventPublisher()
+
+	ctrl := newTestController(t, cmd, cr, grid, pub)
+	ctrl.sessionRepo = sr
+	ctrl.SetSolarThreshold(1000)
+
+	ctrl.tick(context.Background())
+
+	if len(cmd.RemoteStopCalls) != 1 {
+		t.Fatalf("RemoteStopCalls = %d, want 1", len(cmd.RemoteStopCalls))
+	}
+	call := cmd.RemoteStopCalls[0]
+	if call.ChargerID != "CHG-A" {
+		t.Errorf("RemoteStop charger = %s, want CHG-A", call.ChargerID)
+	}
+	if call.TransactionID != 42 {
+		t.Errorf("RemoteStop txID = %d, want 42", call.TransactionID)
+	}
+
+	if len(cmd.SetChargingProfileCalls) != 0 {
+		t.Errorf("SetChargingProfileCalls should be 0 (gate stopped, processCharger skipped), got %d", len(cmd.SetChargingProfileCalls))
+	}
+
+	_, stopped := ctrl.solarGateStopped.Load("CHG-A")
+	if !stopped {
+		t.Error("CHG-A should be in solarGateStopped")
+	}
+}
+
+func TestController_SolarGateRestoresAboveThreshold(t *testing.T) {
+	cmd := mocks.NewMockChargerCommander()
+	cr := mocks.NewMockChargerRepository()
+	cr.Chargers["CHG-A"] = charger.Charger{ID: "CHG-A", Online: true}
+	cr.Connectors["CHG-A"] = []charger.Connector{
+		{ChargerID: "CHG-A", ConnectorID: 1, Status: charger.StatusCharging},
+	}
+	sr := mocks.NewMockSessionRepository()
+	grid := mocks.NewMockEnergySource()
+	grid.SolarPowerW = 1500
+	grid.SolarAvail = true
+	grid.Stale = false
+	pub := mocks.NewMockEventPublisher()
+
+	ctrl := newTestController(t, cmd, cr, grid, pub)
+	ctrl.sessionRepo = sr
+	ctrl.SetSolarThreshold(1000)
+
+	// Pre-seed solarGateStopped
+	ctrl.solarGateStopped.Store("CHG-A", struct{}{})
+
+	ctrl.tick(context.Background())
+
+	if len(cmd.RemoteStartCalls) != 1 {
+		t.Fatalf("RemoteStartCalls = %d, want 1", len(cmd.RemoteStartCalls))
+	}
+	call := cmd.RemoteStartCalls[0]
+	if call.ChargerID != "CHG-A" {
+		t.Errorf("RemoteStart charger = %s, want CHG-A", call.ChargerID)
+	}
+	if call.ConnectorID != 1 {
+		t.Errorf("RemoteStart connector = %d, want 1", call.ConnectorID)
+	}
+	if call.IDTag != "solar" {
+		t.Errorf("RemoteStart IDTag = %q, want \"solar\"", call.IDTag)
+	}
+
+	_, stopped := ctrl.solarGateStopped.Load("CHG-A")
+	if stopped {
+		t.Error("CHG-A should be removed from solarGateStopped after restore")
+	}
+}
+
+func TestController_SolarGateSkipsManualOverride(t *testing.T) {
+	cmd := mocks.NewMockChargerCommander()
+	cr := mocks.NewMockChargerRepository()
+	cr.Chargers["CHG-A"] = charger.Charger{ID: "CHG-A", Online: true}
+	cr.Connectors["CHG-A"] = []charger.Connector{
+		{ChargerID: "CHG-A", ConnectorID: 1, Status: charger.StatusCharging},
+	}
+	sr := mocks.NewMockSessionRepository()
+	sr.Sessions["sess-1"] = session.Session{
+		ID:            "sess-1",
+		TransactionID: 42,
+		ChargerID:     "CHG-A",
+		ConnectorID:   1,
+		StartedAt:     time.Now(),
+	}
+	grid := mocks.NewMockEnergySource()
+	grid.SolarPowerW = 500
+	grid.SolarAvail = true
+	grid.Stale = false
+	pub := mocks.NewMockEventPublisher()
+
+	ctrl := newTestController(t, cmd, cr, grid, pub)
+	ctrl.sessionRepo = sr
+	ctrl.SetSolarThreshold(1000)
+	ctrl.SetManualOverride("CHG-A")
+
+	ctrl.tick(context.Background())
+
+	if len(cmd.RemoteStopCalls) != 0 {
+		t.Errorf("RemoteStopCalls = %d, want 0 (manual override should skip)", len(cmd.RemoteStopCalls))
+	}
+
+	_, stopped := ctrl.solarGateStopped.Load("CHG-A")
+	if stopped {
+		t.Error("CHG-A should NOT be in solarGateStopped (manual override skipped)")
+	}
+}
+
+func TestController_SolarGateDisabledAtZero(t *testing.T) {
+	cmd := mocks.NewMockChargerCommander()
+	cr := mocks.NewMockChargerRepository()
+	cr.Chargers["CHG-A"] = charger.Charger{ID: "CHG-A", Online: true}
+	cr.Connectors["CHG-A"] = []charger.Connector{
+		{ChargerID: "CHG-A", ConnectorID: 1, Status: charger.StatusCharging},
+	}
+	sr := mocks.NewMockSessionRepository()
+	grid := mocks.NewMockEnergySource()
+	grid.GridPowerW = -4000
+	grid.SolarAvail = true
+	grid.SolarPowerW = 500
+	grid.Stale = false
+	pub := mocks.NewMockEventPublisher()
+
+	ctrl := newTestController(t, cmd, cr, grid, pub)
+	ctrl.sessionRepo = sr
+	ctrl.SetSolarThreshold(0)
+
+	ctrl.tick(context.Background())
+
+	// Normal processCharger should run (surplus adjustment)
+	if len(cmd.SetChargingProfileCalls) != 1 {
+		t.Errorf("SetChargingProfileCalls = %d, want 1 (normal processCharger should run)", len(cmd.SetChargingProfileCalls))
+	}
+
+	if len(cmd.RemoteStopCalls) != 0 {
+		t.Errorf("RemoteStopCalls = %d, want 0 (gate disabled)", len(cmd.RemoteStopCalls))
+	}
+}
+
+func TestController_SolarGateClearedOfflineChargers(t *testing.T) {
+	cmd := mocks.NewMockChargerCommander()
+	cr := mocks.NewMockChargerRepository()
+	cr.Chargers["CHG-A"] = charger.Charger{ID: "CHG-A", Online: true}
+	cr.Chargers["CHG-B"] = charger.Charger{ID: "CHG-B", Online: false}
+	cr.Connectors["CHG-A"] = []charger.Connector{
+		{ChargerID: "CHG-A", ConnectorID: 1, Status: charger.StatusCharging},
+	}
+	sr := mocks.NewMockSessionRepository()
+	sr.Sessions["sess-1"] = session.Session{
+		ID:            "sess-1",
+		TransactionID: 42,
+		ChargerID:     "CHG-A",
+		ConnectorID:   1,
+		StartedAt:     time.Now(),
+	}
+	grid := mocks.NewMockEnergySource()
+	grid.SolarPowerW = 500
+	grid.SolarAvail = true
+	grid.Stale = false
+	pub := mocks.NewMockEventPublisher()
+
+	ctrl := newTestController(t, cmd, cr, grid, pub)
+	ctrl.sessionRepo = sr
+	ctrl.SetSolarThreshold(1000)
+
+	// Pre-seed solarGateStopped for both chargers (simulating prior stops)
+	ctrl.solarGateStopped.Store("CHG-A", struct{}{})
+	ctrl.solarGateStopped.Store("CHG-B", struct{}{})
+
+	ctrl.tick(context.Background())
+
+	// CHG-B should be cleared from solarGateStopped because it went offline
+	_, stopped := ctrl.solarGateStopped.Load("CHG-B")
+	if stopped {
+		t.Error("CHG-B should be removed from solarGateStopped (went offline)")
+	}
 }

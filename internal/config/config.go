@@ -63,6 +63,7 @@ type ChargingConfig struct {
 	MaxAmps              int `yaml:"max_amps"`
 	ContactorCooldownSec int `yaml:"contactor_cooldown_sec"`
 	DefaultAmps          int `yaml:"default_amps"`
+	SolarThresholdW      int `yaml:"solar_threshold_w"`
 }
 
 // Load reads configuration from the given YAML file path, then overlays
@@ -161,6 +162,7 @@ func applyEnvOverrides(cfg *Config) {
 		"PANYA_CHARGING_MAX_AMPS":             &cfg.Charging.MaxAmps,
 		"PANYA_CHARGING_DEFAULT_AMPS":         &cfg.Charging.DefaultAmps,
 		"PANYA_CHARGING_CONTACTOR_COOLDOWN_SEC": &cfg.Charging.ContactorCooldownSec,
+		"PANYA_CHARGING_SOLAR_THRESHOLD_W":     &cfg.Charging.SolarThresholdW,
 		"PANYA_MQTT_DISCONNECT_THRESHOLD_SEC": &cfg.MQTT.DisconnectThresholdSec,
 	}
 	for env, ptr := range intOverrides {

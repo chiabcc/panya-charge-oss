@@ -17,6 +17,7 @@ import (
 type Controller struct {
 	commander      ports.ChargerCommander
 	chargerRepo    ports.ChargerRepository
+	sessionRepo    ports.SessionRepository
 	energySource   ports.EnergySource
 	publisher      ports.EventPublisher
 	calc           *smartcharging.Calculator
@@ -29,11 +30,14 @@ type Controller struct {
 	emitter        EventEmitter
 	enabled        atomic.Bool
 	manualOverride sync.Map // keyed by chargerID; value is struct{}{}
+	solarThreshold atomic.Int32
+	solarGateStopped sync.Map // keyed by chargerID; tracks chargers stopped by solar gate
 }
 
 func NewController(
 	cmd ports.ChargerCommander,
 	cr ports.ChargerRepository,
+	sr ports.SessionRepository,
 	energy ports.EnergySource,
 	pub ports.EventPublisher,
 	calc *smartcharging.Calculator,
@@ -45,6 +49,7 @@ func NewController(
 	c := &Controller{
 		commander:    cmd,
 		chargerRepo:  cr,
+		sessionRepo:  sr,
 		energySource: energy,
 		publisher:    pub,
 		calc:         calc,
@@ -153,6 +158,17 @@ func (c *Controller) LastSetAmps(chargerID string, connectorID int) int {
 	return 0
 }
 
+// SetSolarThreshold sets the solar production threshold (Watts).
+// Values <= 0 disable the solar gate (always allow charging).
+func (c *Controller) SetSolarThreshold(watts int) {
+	c.solarThreshold.Store(int32(watts))
+}
+
+// GetSolarThreshold returns the current solar production threshold in Watts.
+func (c *Controller) GetSolarThreshold() int {
+	return int(c.solarThreshold.Load())
+}
+
 func (c *Controller) emit(ev csms.Event) {
 	if c.emitter == nil {
 		return
@@ -194,15 +210,110 @@ func (c *Controller) tick(ctx context.Context) {
 		return
 	}
 
-	sample, surplusW := c.collectMeterSample()
+	// Solar gate: if enabled (threshold > 0), check solar production before
+	// running normal surplus calculation. Gate runs before processCharger.
+	if throttleProcess := c.runSolarGate(ctx, chargers); throttleProcess {
+		return
+	}
+
+	sample, _ := c.collectMeterSample()
 	c.warnSensorDrift(sample)
 
 	for _, ch := range chargers {
 		if !ch.Online {
 			continue
 		}
-		c.processCharger(ctx, ch, sample, surplusW)
+		c.processCharger(ctx, ch, sample)
 	}
+}
+
+func (c *Controller) runSolarGate(ctx context.Context, chargers []charger.Charger) bool {
+	threshold := int(c.solarThreshold.Load())
+	if threshold <= 0 {
+		return false
+	}
+
+	if !c.energySource.IsSolarAvailable(c.staleTimeout) {
+		return false
+	}
+
+	solarW := c.energySource.GetSolarPowerW()
+
+	// Clear solarGateStopped entries for chargers that went offline.
+	for _, ch := range chargers {
+		if !ch.Online {
+			c.solarGateStopped.Delete(ch.ID)
+		}
+	}
+
+	if solarW < float64(threshold) {
+		// Solar below threshold — stop all eligible active transactions.
+		for _, ch := range chargers {
+			if !ch.Online {
+				continue
+			}
+			if c.IsManualOverride(ch.ID) {
+				continue
+			}
+			if _, loaded := c.solarGateStopped.LoadOrStore(ch.ID, struct{}{}); loaded {
+				continue
+			}
+
+			conns, err := c.chargerRepo.ListConnectors(ctx, ch.ID)
+			if err != nil {
+				continue
+			}
+			stopped := false
+			for _, conn := range conns {
+				if conn.ConnectorID == 0 {
+					continue
+				}
+				active, err := c.sessionRepo.GetActiveSession(ctx, ch.ID, conn.ConnectorID)
+				if err != nil || active == nil {
+					continue
+				}
+				_ = c.commander.RemoteStopTransaction(ch.ID, active.TransactionID)
+				stopped = true
+			}
+			if stopped {
+				c.logger.Info("solar production below threshold — stopping charge",
+					"charger", ch.ID,
+					"solar_w", solarW,
+					"threshold_w", threshold,
+				)
+			}
+		}
+		return true
+	}
+
+	// Solar sufficient — resume chargers that were stopped by the gate.
+	for _, ch := range chargers {
+		if !ch.Online {
+			c.solarGateStopped.Delete(ch.ID)
+			continue
+		}
+		if _, loaded := c.solarGateStopped.LoadAndDelete(ch.ID); !loaded {
+			continue
+		}
+
+		conns, err := c.chargerRepo.ListConnectors(ctx, ch.ID)
+		if err != nil {
+			continue
+		}
+		for _, conn := range conns {
+			if conn.ConnectorID == 0 {
+				continue
+			}
+			_ = c.commander.RemoteStartTransaction(ch.ID, conn.ConnectorID, "solar")
+		}
+		c.logger.Info("solar production sufficient — resuming charge",
+			"charger", ch.ID,
+			"solar_w", solarW,
+			"threshold_w", threshold,
+		)
+	}
+
+	return false
 }
 
 func (c *Controller) collectMeterSample() (smartcharging.MeterSample, float64) {
@@ -242,7 +353,7 @@ func (c *Controller) warnSensorDrift(sample smartcharging.MeterSample) {
 	)
 }
 
-func (c *Controller) processCharger(ctx context.Context, ch charger.Charger, sample smartcharging.MeterSample, surplusW float64) {
+func (c *Controller) processCharger(ctx context.Context, ch charger.Charger, sample smartcharging.MeterSample) {
 	if c.IsManualOverride(ch.ID) {
 		return
 	}
@@ -256,11 +367,11 @@ func (c *Controller) processCharger(ctx context.Context, ch charger.Charger, sam
 		if conn.Status != "Charging" && conn.Status != "SuspendedEVSE" {
 			continue
 		}
-		c.processConnector(ch, conn, sample, surplusW)
+		c.processConnector(ch, conn, sample)
 	}
 }
 
-func (c *Controller) processConnector(ch charger.Charger, conn charger.Connector, sample smartcharging.MeterSample, surplusW float64) {
+func (c *Controller) processConnector(ch charger.Charger, conn charger.Connector, sample smartcharging.MeterSample) {
 	result := c.calc.Compute(ch.ID, sample)
 
 	key := fmt.Sprintf("%s:%d", ch.ID, conn.ConnectorID)

@@ -194,6 +194,16 @@ func buildDiscoveryPayloads(c charger.Charger, baseTopic, gridTopic string, minA
 				Options: []string{"auto", "manual"}, Icon: "mdi:cog", EntityCategory: "config",
 			},
 		},
+		{
+			discoveryTopic("number", "solar_threshold"),
+			haNumberConfig{
+				Name: "Solar Threshold", StateTopic: topic("solar_threshold"), CommandTopic: topic("command/solar_threshold"),
+				UniqueID: nodeID + "-solar-threshold",
+				Device:   device, AvailabilityTopic: availTopic, PayloadAvailable: avail, PayloadNotAvailable: notAvail,
+				Min: 0, Max: 10000, Step: 50, Mode: "slider",
+				UnitOfMeasurement: "W", DeviceClass: "power", EntityCategory: "config",
+			},
+		},
 	}
 
 	if proxyEnabled {
@@ -281,6 +291,7 @@ func (p *Publisher) PublishDiscovery(c charger.Charger, minAmps, maxAmps int, pr
 	}
 
 	p.PublishChargerMode(c.ID, "auto")
+	p.PublishSolarThreshold(c.ID, 0)
 
 	p.logger.Info("published HA discovery",
 		"charger", c.ID,
