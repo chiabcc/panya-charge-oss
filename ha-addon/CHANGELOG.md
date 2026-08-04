@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+### Bug Fixes
+
+* **mqtt:** use total_increasing for Charging Energy to avoid last_reset ([73a3087](https://github.com/chiabcc/panya-charge-oss/commit/73a30870ac53a03db5de319a24f14182f35676ab))
+
 ## 0.3.0
 
 ### Features
