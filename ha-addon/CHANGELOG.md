@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.9
+
+### Bug Fixes
+
+* **lint:** move session recovery before meter parsing to avoid ineffassign ([275cd12](https://github.com/chiabcc/panya-charge-oss/commit/275cd12295b4aaf3280adb17ea4d338b258cb2e2))
+* **mqtt:** retain session energy for HA energy dashboard ([828252c](https://github.com/chiabcc/panya-charge-oss/commit/828252c5c670277273147cde0b969288ba1f902e))
+* **ocpp:** recover active session after CSMS restart ([2d346bd](https://github.com/chiabcc/panya-charge-oss/commit/2d346bdb0860bb71baa5adacec4e95d005c35388))
+* **webui:** populate charging power and current limit on status page ([e6668a7](https://github.com/chiabcc/panya-charge-oss/commit/e6668a73b9dbdf630453b41249829804c6546fa1))
+
 ## 0.2.8
 
 ### Bug Fixes
