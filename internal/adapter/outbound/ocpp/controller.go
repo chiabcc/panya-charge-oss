@@ -30,9 +30,16 @@ type Controller struct {
 	emitter        EventEmitter
 	enabled        atomic.Bool
 	manualOverride sync.Map // keyed by chargerID; value is struct{}{}
-	solarThreshold atomic.Int32
-	solarGateStopped sync.Map // keyed by chargerID; tracks chargers stopped by solar gate
+	solarThreshold    atomic.Int32
+	solarGateStopped  sync.Map
+	solarBelowTicks   atomic.Int32
+	solarAboveTicks   atomic.Int32
 }
+
+const (
+	solarGateStopTicks  = 3
+	solarGateStartTicks = 2
+)
 
 func NewController(
 	cmd ports.ChargerCommander,
@@ -230,6 +237,8 @@ func (c *Controller) tick(ctx context.Context) {
 func (c *Controller) runSolarGate(ctx context.Context, chargers []charger.Charger) bool {
 	threshold := int(c.solarThreshold.Load())
 	if threshold <= 0 {
+		c.solarBelowTicks.Store(0)
+		c.solarAboveTicks.Store(0)
 		return false
 	}
 
@@ -239,7 +248,6 @@ func (c *Controller) runSolarGate(ctx context.Context, chargers []charger.Charge
 
 	solarW := c.energySource.GetSolarPowerW()
 
-	// Clear solarGateStopped entries for chargers that went offline.
 	for _, ch := range chargers {
 		if !ch.Online {
 			c.solarGateStopped.Delete(ch.ID)
@@ -247,18 +255,26 @@ func (c *Controller) runSolarGate(ctx context.Context, chargers []charger.Charge
 	}
 
 	if solarW < float64(threshold) {
-		// Solar below threshold — stop all eligible active transactions.
+		c.solarAboveTicks.Store(0)
+		below := c.solarBelowTicks.Add(1)
+
+		if below < int32(solarGateStopTicks) {
+			c.logger.Debug("solar below threshold — debouncing stop",
+				"solar_w", solarW, "threshold_w", threshold,
+				"tick", below, "need", solarGateStopTicks)
+			return true
+		}
+		if below > int32(solarGateStopTicks) {
+			return true
+		}
+
 		for _, ch := range chargers {
-			if !ch.Online {
-				continue
-			}
-			if c.IsManualOverride(ch.ID) {
+			if !ch.Online || c.IsManualOverride(ch.ID) {
 				continue
 			}
 			if _, loaded := c.solarGateStopped.LoadOrStore(ch.ID, struct{}{}); loaded {
 				continue
 			}
-
 			conns, err := c.chargerRepo.ListConnectors(ctx, ch.ID)
 			if err != nil {
 				continue
@@ -277,16 +293,25 @@ func (c *Controller) runSolarGate(ctx context.Context, chargers []charger.Charge
 			}
 			if stopped {
 				c.logger.Info("solar production below threshold — stopping charge",
-					"charger", ch.ID,
-					"solar_w", solarW,
-					"threshold_w", threshold,
-				)
+					"charger", ch.ID, "solar_w", solarW, "threshold_w", threshold)
 			}
 		}
 		return true
 	}
 
-	// Solar sufficient — resume chargers that were stopped by the gate.
+	c.solarBelowTicks.Store(0)
+	above := c.solarAboveTicks.Add(1)
+
+	if above < int32(solarGateStartTicks) {
+		c.logger.Debug("solar above threshold — debouncing restart",
+			"solar_w", solarW, "threshold_w", threshold,
+			"tick", above, "need", solarGateStartTicks)
+		return true
+	}
+	if above > int32(solarGateStartTicks) {
+		return false
+	}
+
 	for _, ch := range chargers {
 		if !ch.Online {
 			c.solarGateStopped.Delete(ch.ID)
@@ -295,7 +320,6 @@ func (c *Controller) runSolarGate(ctx context.Context, chargers []charger.Charge
 		if _, loaded := c.solarGateStopped.LoadAndDelete(ch.ID); !loaded {
 			continue
 		}
-
 		conns, err := c.chargerRepo.ListConnectors(ctx, ch.ID)
 		if err != nil {
 			continue
@@ -307,10 +331,7 @@ func (c *Controller) runSolarGate(ctx context.Context, chargers []charger.Charge
 			_ = c.commander.RemoteStartTransaction(ch.ID, conn.ConnectorID, "solar")
 		}
 		c.logger.Info("solar production sufficient — resuming charge",
-			"charger", ch.ID,
-			"solar_w", solarW,
-			"threshold_w", threshold,
-		)
+			"charger", ch.ID, "solar_w", solarW, "threshold_w", threshold)
 	}
 
 	return false

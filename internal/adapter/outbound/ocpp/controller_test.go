@@ -671,10 +671,12 @@ func TestController_SolarGateStopsBelowThreshold(t *testing.T) {
 	ctrl.sessionRepo = sr
 	ctrl.SetSolarThreshold(1000)
 
-	ctrl.tick(context.Background())
+	for i := 0; i < solarGateStopTicks; i++ {
+		ctrl.tick(context.Background())
+	}
 
 	if len(cmd.RemoteStopCalls) != 1 {
-		t.Fatalf("RemoteStopCalls = %d, want 1", len(cmd.RemoteStopCalls))
+		t.Fatalf("RemoteStopCalls = %d, want 1 after %d ticks", len(cmd.RemoteStopCalls), solarGateStopTicks)
 	}
 	call := cmd.RemoteStopCalls[0]
 	if call.ChargerID != "CHG-A" {
@@ -715,10 +717,12 @@ func TestController_SolarGateRestoresAboveThreshold(t *testing.T) {
 	// Pre-seed solarGateStopped
 	ctrl.solarGateStopped.Store("CHG-A", struct{}{})
 
-	ctrl.tick(context.Background())
+	for i := 0; i < solarGateStartTicks; i++ {
+		ctrl.tick(context.Background())
+	}
 
 	if len(cmd.RemoteStartCalls) != 1 {
-		t.Fatalf("RemoteStartCalls = %d, want 1", len(cmd.RemoteStartCalls))
+		t.Fatalf("RemoteStartCalls = %d, want 1 after %d ticks", len(cmd.RemoteStartCalls), solarGateStartTicks)
 	}
 	call := cmd.RemoteStartCalls[0]
 	if call.ChargerID != "CHG-A" {
@@ -763,7 +767,9 @@ func TestController_SolarGateSkipsManualOverride(t *testing.T) {
 	ctrl.SetSolarThreshold(1000)
 	ctrl.SetManualOverride("CHG-A")
 
-	ctrl.tick(context.Background())
+	for i := 0; i < solarGateStopTicks; i++ {
+		ctrl.tick(context.Background())
+	}
 
 	if len(cmd.RemoteStopCalls) != 0 {
 		t.Errorf("RemoteStopCalls = %d, want 0 (manual override should skip)", len(cmd.RemoteStopCalls))
@@ -842,5 +848,42 @@ func TestController_SolarGateClearedOfflineChargers(t *testing.T) {
 	_, stopped := ctrl.solarGateStopped.Load("CHG-B")
 	if stopped {
 		t.Error("CHG-B should be removed from solarGateStopped (went offline)")
+	}
+}
+
+func TestController_SolarGateDebouncesStop(t *testing.T) {
+	cmd := mocks.NewMockChargerCommander()
+	cr := mocks.NewMockChargerRepository()
+	cr.Chargers["CHG-A"] = charger.Charger{ID: "CHG-A", Online: true}
+	cr.Connectors["CHG-A"] = []charger.Connector{
+		{ChargerID: "CHG-A", ConnectorID: 1, Status: charger.StatusCharging},
+	}
+	sr := mocks.NewMockSessionRepository()
+	sr.Sessions["sess-1"] = session.Session{
+		ID: "sess-1", TransactionID: 42, ChargerID: "CHG-A", ConnectorID: 1, StartedAt: time.Now(),
+	}
+	grid := mocks.NewMockEnergySource()
+	grid.SolarPowerW = 500
+	grid.SolarAvail = true
+	grid.Stale = false
+	pub := mocks.NewMockEventPublisher()
+
+	ctrl := newTestController(t, cmd, cr, grid, pub)
+	ctrl.sessionRepo = sr
+	ctrl.SetSolarThreshold(1000)
+
+	for i := 0; i < solarGateStopTicks-1; i++ {
+		ctrl.tick(context.Background())
+	}
+	if len(cmd.RemoteStopCalls) != 0 {
+		t.Fatalf("RemoteStopCalls after %d ticks = %d, want 0 (debouncing)", solarGateStopTicks-1, len(cmd.RemoteStopCalls))
+	}
+
+	grid.SolarPowerW = 1500
+	for i := 0; i < solarGateStartTicks; i++ {
+		ctrl.tick(context.Background())
+	}
+	if len(cmd.RemoteStopCalls) != 0 {
+		t.Errorf("RemoteStopCalls = %d, want 0 (solar recovered before stop fired)", len(cmd.RemoteStopCalls))
 	}
 }
