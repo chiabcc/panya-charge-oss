@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+### Features
+
+* **mqtt:** add per-session Charging Energy sensor ([e2ecf8a](https://github.com/chiabcc/panya-charge-oss/commit/e2ecf8ad96126c21bec1518b454366805335a0e5))
+
 ## 0.2.9
 
 ### Bug Fixes
