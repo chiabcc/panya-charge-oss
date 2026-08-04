@@ -346,7 +346,7 @@ For end-user setup instructions (broker config, charger wiring, Energy Dashboard
 |--------|------|-------|------|-------|
 | Status | sensor | `charge/<id>/status` | — | Connector status (Available, Charging, Faulted, etc.) |
 | Charging Power | sensor | `charge/<id>/power` | kW | `state_class: measurement` |
-| Charging Energy | sensor | `charge/<id>/energy` | kWh | `state_class: total_increasing` (HA Energy Dashboard compatible) |
+| Session Energy | sensor | `charge/<id>/energy` | kWh | `state_class: total_increasing` (HA Energy Dashboard compatible) |
 | Grid Power | sensor | `grid/power` | W | `state_class: measurement` |
 | Solar Power | sensor | `solar/power` | W | Optional — only if `solar_power` topic configured |
 | Home Consumption | sensor | `consumption/power` | W | Optional — only if `consumption_power` topic configured |

@@ -82,6 +82,10 @@ func (p *Publisher) PublishSessionEnergy(chargerID string, energyKWh float64) {
 	p.publish(fmt.Sprintf("charge/%s/energy", chargerID), fmt.Sprintf("%.3f", energyKWh), true)
 }
 
+func (p *Publisher) PublishChargingEnergy(chargerID string, energyKWh float64) {
+	p.publish(fmt.Sprintf("charge/%s/charging_energy", chargerID), fmt.Sprintf("%.3f", energyKWh), false)
+}
+
 func (p *Publisher) PublishChargerOnline(chargerID string, online bool) {
 	val := "offline"
 	if online {

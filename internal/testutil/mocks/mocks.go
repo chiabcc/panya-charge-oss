@@ -412,6 +412,12 @@ func (m *MockEventPublisher) PublishSessionEnergy(chargerID string, energyKWh fl
 	m.EnergyPublished = append(m.EnergyPublished, EnergyPublish{ChargerID: chargerID, EnergyKWh: energyKWh})
 }
 
+func (m *MockEventPublisher) PublishChargingEnergy(chargerID string, energyKWh float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.EnergyPublished = append(m.EnergyPublished, EnergyPublish{ChargerID: chargerID, EnergyKWh: energyKWh})
+}
+
 func (m *MockEventPublisher) PublishChargerOnline(chargerID string, online bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

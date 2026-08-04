@@ -61,6 +61,7 @@ type EventPublisher interface {
 	PublishChargerStatus(chargerID string, status charger.ConnectorStatus)
 	PublishChargerPower(chargerID string, powerKW float64)
 	PublishSessionEnergy(chargerID string, energyKWh float64)
+	PublishChargingEnergy(chargerID string, energyKWh float64)
 	PublishChargerOnline(chargerID string, online bool)
 	PublishChargerCurrent(chargerID string, amps int)
 	PublishChargingState(chargerID string, charging bool)

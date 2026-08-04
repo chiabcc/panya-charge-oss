@@ -398,6 +398,12 @@ func (h *Handler) OnMeterValues(chargePointId string, req *core.MeterValuesReque
 	}
 	if energyWh > 0 {
 		h.publisher.PublishSessionEnergy(chargePointId, energyWh/1000.0)
+
+		if sessionID != "" {
+			if s, err := h.sessionRepo.GetSession(ctx, sessionID); err == nil && s != nil && energyWh > s.MeterStartWh {
+				h.publisher.PublishChargingEnergy(chargePointId, (energyWh-s.MeterStartWh)/1000.0)
+			}
+		}
 	}
 
 	if h.metrics != nil && powerKW > 0 {
