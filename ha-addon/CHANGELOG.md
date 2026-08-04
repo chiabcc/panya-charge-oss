@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+### Features
+
+* **smart-charging:** add solar gate mode ([e387eec](https://github.com/chiabcc/panya-charge-oss/commit/e387eec75ad635bd32dfdd3e1e90aed001fec8fb))
+
+
+### Bug Fixes
+
+* **smart-charging:** debounce solar gate stop/restart for cloudy weather ([27d2705](https://github.com/chiabcc/panya-charge-oss/commit/27d27054658e8319e23840dc6a2fc320767692ba))
+
 ## 0.3.1
 
 ### Bug Fixes
