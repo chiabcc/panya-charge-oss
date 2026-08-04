@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/chiabcc/panya-charge-oss/compare/v0.3.1...v0.4.0) (2026-08-04)
+
+
+### Features
+
+* **smart-charging:** add solar gate mode ([e387eec](https://github.com/chiabcc/panya-charge-oss/commit/e387eec75ad635bd32dfdd3e1e90aed001fec8fb))
+
+
+### Bug Fixes
+
+* **smart-charging:** debounce solar gate stop/restart for cloudy weather ([27d2705](https://github.com/chiabcc/panya-charge-oss/commit/27d27054658e8319e23840dc6a2fc320767692ba))
+
 ## [0.3.1](https://github.com/chiabcc/panya-charge-oss/compare/v0.3.0...v0.3.1) (2026-08-04)
 
 
